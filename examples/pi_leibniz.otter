@@ -1,4 +1,4 @@
-fn calculate_pi(iterations: f64) -> f64:
+fn calculate_pi(iterations: float) -> float:
     let pi = 0.0
     let sign = 1.0
     
@@ -12,7 +12,7 @@ fn calculate_pi(iterations: f64) -> f64:
     return pi * 4.0
 
 fn main:
-    let iterations = 10000000.5 - 0.5
+    let iterations = 10000000.1
     let pi = calculate_pi(iterations)
     let pi_str = f"{pi}"
     print("π ≈ ")
