@@ -189,34 +189,23 @@ pub fn build_executable(
     // Initialize all LLVM targets before creating any target triples
     Target::initialize_all(&InitializationConfig::default());
 
-    // Determine target triple
-    let target_triple = if let Some(ref target) = options.target {
-        target.clone()
+    // Get native target triple directly from LLVM
+    let native_triple = inkwell::targets::TargetMachine::get_default_triple();
+    let native_str = native_triple.to_string();
+    
+    // Normalize arm64 to aarch64 for LLVM compatibility
+    let normalized_str = if native_str.starts_with("arm64-apple-darwin") {
+        "aarch64-apple-darwin"
     } else {
-        TargetTriple::default()
+        &native_str
     };
     
-    // Normalize to LLVM-compatible triple string
-    // Always use "aarch64-apple-darwin" for macOS ARM (never "arm64")
-    let triple_str = match (target_triple.arch.as_str(), target_triple.os.as_str()) {
-        ("aarch64", "darwin") | ("arm64", "darwin") => "aarch64-apple-darwin".to_string(),
-        ("x86_64", "darwin") => "x86_64-apple-darwin".to_string(),
-        _ => target_triple.to_llvm_triple(),
-    };
-    
-    // Final safety check: ensure no "arm64" strings slip through
-    let triple_str = if triple_str.contains("arm64") {
-        triple_str.replace("arm64", "aarch64")
-    } else {
-        triple_str
-    };
-    
-    // Create inkwell TargetTriple directly
-    let llvm_triple = inkwell::targets::TargetTriple::create(&triple_str);
+    // Create inkwell TargetTriple using normalized string
+    let llvm_triple = inkwell::targets::TargetTriple::create(normalized_str);
     compiler.module.set_triple(&llvm_triple);
 
     let target = Target::from_triple(&llvm_triple)
-        .map_err(|e| anyhow!("failed to create target from triple {}: {e}", triple_str))?;
+        .map_err(|e| anyhow!("failed to create target from triple {}: {e}. Native triple was: {}", normalized_str, native_str))?;
 
     let optimization: OptimizationLevel = options.opt_level.into();
     let target_machine = target
@@ -248,26 +237,29 @@ pub fn build_executable(
 
     // Create a C runtime shim for the FFI functions (target-specific)
     let runtime_c = output.with_extension("runtime.c");
-    let runtime_c_content = target_triple.runtime_c_code();
+    // Parse normalized triple for runtime code generation
+    let runtime_triple = TargetTriple::parse(normalized_str)
+        .unwrap_or_else(|_| TargetTriple::new("x86_64", "unknown", "linux", Some("gnu")));
+    let runtime_c_content = runtime_triple.runtime_c_code();
     fs::write(&runtime_c, runtime_c_content).context("failed to write runtime C file")?;
 
     // Compile the runtime C file (target-specific)
     let runtime_o = output.with_extension("runtime.o");
-    let linker = target_triple.linker();
+    let linker = runtime_triple.linker();
     let mut cc = Command::new(&linker);
     
     // Add target-specific compiler flags
-    if target_triple.is_wasm() {
+    if runtime_triple.is_wasm() {
         // For WebAssembly, use clang with target flag
-        cc.arg("--target").arg(&triple_str).arg("-c");
+        cc.arg("--target").arg(normalized_str).arg("-c");
     } else {
         cc.arg("-c");
-        if target_triple.needs_pic() && !target_triple.is_windows() {
+        if runtime_triple.needs_pic() && !runtime_triple.is_windows() {
             cc.arg("-fPIC");
         }
         // Add target triple for cross-compilation
         if options.target.is_some() {
-            cc.arg("--target").arg(&triple_str);
+            cc.arg("--target").arg(normalized_str);
         }
     }
     
@@ -282,13 +274,13 @@ pub fn build_executable(
     }
 
     // Link the object files together (target-specific)
-    let linker = target_triple.linker();
+    let linker = runtime_triple.linker();
     let mut cc = Command::new(&linker);
     
     // Add target-specific linker flags
-    if target_triple.is_wasm() {
+    if runtime_triple.is_wasm() {
         // WebAssembly linking
-        cc.arg("--target").arg(&triple_str)
+        cc.arg("--target").arg(normalized_str)
             .arg("--no-entry")
             .arg("--export-dynamic")
             .arg(&object_path)
@@ -297,13 +289,13 @@ pub fn build_executable(
     } else {
         // Standard linking
         if options.target.is_some() {
-            cc.arg("--target").arg(&triple_str);
+            cc.arg("--target").arg(normalized_str);
         }
         cc.arg(&object_path).arg(&runtime_o).arg("-o").arg(output);
     }
     
     // Apply target-specific linker flags
-    for flag in target_triple.linker_flags() {
+    for flag in runtime_triple.linker_flags() {
         cc.arg(&flag);
     }
 
@@ -380,34 +372,23 @@ pub fn build_shared_library(
     // Initialize all LLVM targets before creating any target triples
     Target::initialize_all(&InitializationConfig::default());
 
-    // Determine target triple
-    let target_triple = if let Some(ref target) = options.target {
-        target.clone()
+    // Get native target triple directly from LLVM
+    let native_triple = inkwell::targets::TargetMachine::get_default_triple();
+    let native_str = native_triple.to_string();
+    
+    // Normalize arm64 to aarch64 for LLVM compatibility
+    let normalized_str = if native_str.starts_with("arm64-apple-darwin") {
+        "aarch64-apple-darwin"
     } else {
-        TargetTriple::default()
+        &native_str
     };
     
-    // Normalize to LLVM-compatible triple string
-    // Always use "aarch64-apple-darwin" for macOS ARM (never "arm64")
-    let triple_str = match (target_triple.arch.as_str(), target_triple.os.as_str()) {
-        ("aarch64", "darwin") | ("arm64", "darwin") => "aarch64-apple-darwin".to_string(),
-        ("x86_64", "darwin") => "x86_64-apple-darwin".to_string(),
-        _ => target_triple.to_llvm_triple(),
-    };
-    
-    // Final safety check: ensure no "arm64" strings slip through
-    let triple_str = if triple_str.contains("arm64") {
-        triple_str.replace("arm64", "aarch64")
-    } else {
-        triple_str
-    };
-    
-    // Create inkwell TargetTriple directly
-    let llvm_triple = inkwell::targets::TargetTriple::create(&triple_str);
+    // Create inkwell TargetTriple using normalized string
+    let llvm_triple = inkwell::targets::TargetTriple::create(normalized_str);
     compiler.module.set_triple(&llvm_triple);
 
     let target = Target::from_triple(&llvm_triple)
-        .map_err(|e| anyhow!("failed to create target from triple {}: {e}", triple_str))?;
+        .map_err(|e| anyhow!("failed to create target from triple {}: {e}. Native triple was: {}", normalized_str, native_str))?;
 
     let optimization: OptimizationLevel = options.opt_level.into();
     let target_machine = target
@@ -512,7 +493,7 @@ pub fn build_shared_library(
     }
     
     // Apply target-specific linker flags
-    for flag in target_triple.linker_flags() {
+    for flag in runtime_triple.linker_flags() {
         cc.arg(&flag);
     }
 
