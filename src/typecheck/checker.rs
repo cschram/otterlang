@@ -417,13 +417,10 @@ impl TypeChecker {
     pub fn infer_expr_type(&mut self, expr: &Expr) -> Result<TypeInfo> {
         match expr {
             Expr::Literal(lit) => Ok(match lit {
-                Literal::Number(n) => {
-                    // Check if number is whole (integer) or has decimal part
-                    if n.fract() == 0.0 && *n <= i32::MAX as f64 && *n >= i32::MIN as f64 {
-                        TypeInfo::I32
-                    } else {
-                        TypeInfo::F64
-                    }
+                Literal::Number(_n) => {
+                    // Always infer numeric literals as F64 for consistency
+                    // This avoids type inference issues with float parameters
+                    TypeInfo::F64
                 }
                 Literal::String(_) => TypeInfo::Str,
                 Literal::Bool(_) => TypeInfo::Bool,
