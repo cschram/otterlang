@@ -193,19 +193,13 @@ pub fn build_executable(
     let native_triple = inkwell::targets::TargetMachine::get_default_triple();
     let native_str = native_triple.to_string();
     
-    // Normalize arm64 to aarch64 for LLVM compatibility
-    let normalized_str = if native_str.starts_with("arm64-apple-darwin") {
-        "aarch64-apple-darwin"
-    } else {
-        &native_str
-    };
-    
-    // Create inkwell TargetTriple using normalized string
-    let llvm_triple = inkwell::targets::TargetTriple::create(normalized_str);
+    // Use the native triple as-is (e.g., "arm64-apple-darwin25.0.0")
+    // LLVM recognizes the native triple format
+    let llvm_triple = inkwell::targets::TargetTriple::create(&native_str);
     compiler.module.set_triple(&llvm_triple);
 
     let target = Target::from_triple(&llvm_triple)
-        .map_err(|e| anyhow!("failed to create target from triple {}: {e}. Native triple was: {}", normalized_str, native_str))?;
+        .map_err(|e| anyhow!("failed to create target from triple {}: {e}", native_str))?;
 
     let optimization: OptimizationLevel = options.opt_level.into();
     let target_machine = target
@@ -237,8 +231,8 @@ pub fn build_executable(
 
     // Create a C runtime shim for the FFI functions (target-specific)
     let runtime_c = output.with_extension("runtime.c");
-    // Parse normalized triple for runtime code generation
-    let runtime_triple = TargetTriple::parse(normalized_str)
+    // Parse native triple for runtime code generation
+    let runtime_triple = TargetTriple::parse(&native_str)
         .unwrap_or_else(|_| TargetTriple::new("x86_64", "unknown", "linux", Some("gnu")));
     let runtime_c_content = runtime_triple.runtime_c_code();
     fs::write(&runtime_c, runtime_c_content).context("failed to write runtime C file")?;
@@ -251,7 +245,7 @@ pub fn build_executable(
     // Add target-specific compiler flags
     if runtime_triple.is_wasm() {
         // For WebAssembly, use clang with target flag
-        cc.arg("--target").arg(normalized_str).arg("-c");
+        cc.arg("--target").arg(&native_str).arg("-c");
     } else {
         cc.arg("-c");
         if runtime_triple.needs_pic() && !runtime_triple.is_windows() {
@@ -259,7 +253,7 @@ pub fn build_executable(
         }
         // Add target triple for cross-compilation
         if options.target.is_some() {
-            cc.arg("--target").arg(normalized_str);
+            cc.arg("--target").arg(&native_str);
         }
     }
     
@@ -280,7 +274,7 @@ pub fn build_executable(
     // Add target-specific linker flags
     if runtime_triple.is_wasm() {
         // WebAssembly linking
-        cc.arg("--target").arg(normalized_str)
+        cc.arg("--target").arg(&native_str)
             .arg("--no-entry")
             .arg("--export-dynamic")
             .arg(&object_path)
@@ -289,7 +283,7 @@ pub fn build_executable(
     } else {
         // Standard linking
         if options.target.is_some() {
-            cc.arg("--target").arg(normalized_str);
+            cc.arg("--target").arg(&native_str);
         }
         cc.arg(&object_path).arg(&runtime_o).arg("-o").arg(output);
     }
@@ -376,19 +370,13 @@ pub fn build_shared_library(
     let native_triple = inkwell::targets::TargetMachine::get_default_triple();
     let native_str = native_triple.to_string();
     
-    // Normalize arm64 to aarch64 for LLVM compatibility
-    let normalized_str = if native_str.starts_with("arm64-apple-darwin") {
-        "aarch64-apple-darwin"
-    } else {
-        &native_str
-    };
-    
-    // Create inkwell TargetTriple using normalized string
-    let llvm_triple = inkwell::targets::TargetTriple::create(normalized_str);
+    // Use the native triple as-is (e.g., "arm64-apple-darwin25.0.0")
+    // LLVM recognizes the native triple format
+    let llvm_triple = inkwell::targets::TargetTriple::create(&native_str);
     compiler.module.set_triple(&llvm_triple);
 
     let target = Target::from_triple(&llvm_triple)
-        .map_err(|e| anyhow!("failed to create target from triple {}: {e}. Native triple was: {}", normalized_str, native_str))?;
+        .map_err(|e| anyhow!("failed to create target from triple {}: {e}", native_str))?;
 
     let optimization: OptimizationLevel = options.opt_level.into();
     let target_machine = target
@@ -421,23 +409,26 @@ pub fn build_shared_library(
 
     // Create runtime C file (target-specific)
     let runtime_c = output.with_extension("runtime.c");
-    let runtime_c_content = target_triple.runtime_c_code();
+    // Parse native triple for runtime code generation
+    let runtime_triple = TargetTriple::parse(&native_str)
+        .unwrap_or_else(|_| TargetTriple::new("x86_64", "unknown", "linux", Some("gnu")));
+    let runtime_c_content = runtime_triple.runtime_c_code();
     fs::write(&runtime_c, runtime_c_content)
         .context("failed to write runtime C file")?;
 
     // Compile runtime C file (target-specific)
     let runtime_o = output.with_extension("runtime.o");
-    let linker = target_triple.linker();
+    let linker = runtime_triple.linker();
     let mut cc = Command::new(&linker);
     
     // Add target-specific compiler flags
-    if target_triple.is_wasm() {
-        cc.arg("--target").arg(&triple_str).arg("-c");
+    if runtime_triple.is_wasm() {
+        cc.arg("--target").arg(&native_str).arg("-c");
     } else {
         cc.arg("-c");
         cc.arg("-fPIC"); // Position-independent code for shared library
         if options.target.is_some() {
-            cc.arg("--target").arg(&triple_str);
+            cc.arg("--target").arg(&native_str);
         }
     }
     
@@ -452,11 +443,11 @@ pub fn build_shared_library(
     }
 
     // Determine shared library extension (target-specific)
-    let lib_ext = if target_triple.is_wasm() {
+    let lib_ext = if runtime_triple.is_wasm() {
         "wasm"
-    } else if target_triple.is_windows() {
+    } else if runtime_triple.is_windows() {
         "dll"
-    } else if target_triple.os == "darwin" {
+    } else if runtime_triple.os == "darwin" {
         "dylib"
     } else {
         "so"
@@ -469,11 +460,11 @@ pub fn build_shared_library(
     };
 
     // Link as shared library (target-specific)
-    let linker = target_triple.linker();
+    let linker = runtime_triple.linker();
     let mut cc = Command::new(&linker);
     
-    if target_triple.is_wasm() {
-        cc.arg("--target").arg(&triple_str)
+    if runtime_triple.is_wasm() {
+        cc.arg("--target").arg(&native_str)
             .arg("--no-entry")
             .arg("--export-dynamic")
             .arg("-o")
@@ -488,7 +479,7 @@ pub fn build_shared_library(
             .arg(&runtime_o);
         
         if options.target.is_some() {
-            cc.arg("--target").arg(&triple_str);
+            cc.arg("--target").arg(&native_str);
         }
     }
     
