@@ -186,6 +186,7 @@ pub fn build_executable(
         compiler.cached_ir = Some(compiler.module.print_to_string().to_string());
     }
 
+    // Initialize all LLVM targets before creating any target triples
     Target::initialize_all(&InitializationConfig::default());
 
     // Determine target triple
@@ -195,18 +196,17 @@ pub fn build_executable(
         TargetTriple::default()
     };
     
-    // Get the normalized triple string for LLVM
-    let triple_str = if target_triple.arch == "aarch64" && target_triple.os == "darwin" {
-        "aarch64-apple-darwin".to_string()
-    } else if target_triple.arch == "x86_64" && target_triple.os == "darwin" {
-        "x86_64-apple-darwin".to_string()
-    } else {
-        target_triple.to_llvm_triple()
+    // Normalize to LLVM-compatible triple string
+    // Always use "aarch64-apple-darwin" for macOS ARM (never "arm64")
+    let triple_str = match (target_triple.arch.as_str(), target_triple.os.as_str()) {
+        ("aarch64", "darwin") | ("arm64", "darwin") => "aarch64-apple-darwin".to_string(),
+        ("x86_64", "darwin") => "x86_64-apple-darwin".to_string(),
+        _ => target_triple.to_llvm_triple(),
     };
     
-    // Debug: Ensure we're using aarch64 for macOS ARM
-    let triple_str = if triple_str == "arm64-apple-darwin" {
-        "aarch64-apple-darwin".to_string()
+    // Final safety check: ensure no "arm64" strings slip through
+    let triple_str = if triple_str.contains("arm64") {
+        triple_str.replace("arm64", "aarch64")
     } else {
         triple_str
     };
@@ -377,6 +377,7 @@ pub fn build_shared_library(
         compiler.cached_ir = Some(compiler.module.print_to_string().to_string());
     }
 
+    // Initialize all LLVM targets before creating any target triples
     Target::initialize_all(&InitializationConfig::default());
 
     // Determine target triple
@@ -386,18 +387,17 @@ pub fn build_shared_library(
         TargetTriple::default()
     };
     
-    // Get the normalized triple string for LLVM
-    let triple_str = if target_triple.arch == "aarch64" && target_triple.os == "darwin" {
-        "aarch64-apple-darwin".to_string()
-    } else if target_triple.arch == "x86_64" && target_triple.os == "darwin" {
-        "x86_64-apple-darwin".to_string()
-    } else {
-        target_triple.to_llvm_triple()
+    // Normalize to LLVM-compatible triple string
+    // Always use "aarch64-apple-darwin" for macOS ARM (never "arm64")
+    let triple_str = match (target_triple.arch.as_str(), target_triple.os.as_str()) {
+        ("aarch64", "darwin") | ("arm64", "darwin") => "aarch64-apple-darwin".to_string(),
+        ("x86_64", "darwin") => "x86_64-apple-darwin".to_string(),
+        _ => target_triple.to_llvm_triple(),
     };
     
-    // Debug: Ensure we're using aarch64 for macOS ARM
-    let triple_str = if triple_str == "arm64-apple-darwin" {
-        "aarch64-apple-darwin".to_string()
+    // Final safety check: ensure no "arm64" strings slip through
+    let triple_str = if triple_str.contains("arm64") {
+        triple_str.replace("arm64", "aarch64")
     } else {
         triple_str
     };

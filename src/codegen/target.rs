@@ -36,7 +36,12 @@ impl TargetTriple {
             return Err(format!("Invalid target triple format: {}", triple));
         }
 
-        let arch = parts[0].to_string();
+        let mut arch = parts[0].to_string();
+        // Normalize arm64 to aarch64 for LLVM compatibility
+        if arch == "arm64" {
+            arch = "aarch64".to_string();
+        }
+        
         let vendor = parts[1].to_string();
         let raw_os = parts[2];
 
