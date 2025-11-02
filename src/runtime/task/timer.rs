@@ -154,38 +154,41 @@ mod tests {
         let flag1 = Arc::new(AtomicBool::new(false));
         let flag2 = Arc::new(AtomicBool::new(false));
 
+        // Record start time to track elapsed time precisely
+        let start = Instant::now();
         let waker1 = create_test_waker(Arc::clone(&flag1));
         let waker2 = create_test_waker(Arc::clone(&flag2));
 
         // Schedule two wakeups with longer delays to avoid timing issues
-        wheel.schedule_wakeup(Duration::from_millis(100), waker1);
-        wheel.schedule_wakeup(Duration::from_millis(200), waker2);
+        wheel.schedule_wakeup(Duration::from_millis(200), waker1);
+        wheel.schedule_wakeup(Duration::from_millis(400), waker2);
 
         // Process immediately - should not wake yet
         wheel.process_expired();
         assert!(!flag1.load(Ordering::SeqCst));
         assert!(!flag2.load(Ordering::SeqCst));
 
-        // Wait for first timer to expire (with some buffer)
-        std::thread::sleep(Duration::from_millis(150));
-
-        // Process expired timers
-        wheel.process_expired();
+        // Wait for first timer to expire - wait until we've passed the deadline
+        while start.elapsed() < Duration::from_millis(250) {
+            std::thread::sleep(Duration::from_millis(10));
+            wheel.process_expired();
+        }
+        
+        // Small delay to ensure waker flags are updated
+        std::thread::sleep(Duration::from_millis(20));
 
         // First timer should have fired, second should not
-        // Give it a moment for the waker to update the flag
-        std::thread::sleep(Duration::from_millis(10));
         assert!(flag1.load(Ordering::SeqCst), "First timer should have fired");
-        assert!(!flag2.load(Ordering::SeqCst), "Second timer should not have fired yet");
+        assert!(!flag2.load(Ordering::SeqCst), "Second timer should not have fired yet (only {}ms elapsed)", start.elapsed().as_millis());
 
-        // Wait for second timer to expire
-        std::thread::sleep(Duration::from_millis(100));
-
-        // Process again
-        wheel.process_expired();
+        // Wait for second timer to expire - wait until we've passed the deadline
+        while start.elapsed() < Duration::from_millis(450) {
+            std::thread::sleep(Duration::from_millis(10));
+            wheel.process_expired();
+        }
         
-        // Give it a moment for the waker to update the flag
-        std::thread::sleep(Duration::from_millis(10));
+        // Small delay to ensure waker flags are updated
+        std::thread::sleep(Duration::from_millis(20));
 
         // Both should have fired
         assert!(flag1.load(Ordering::SeqCst));
