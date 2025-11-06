@@ -234,6 +234,47 @@ otterlang profile memory program.ot # Profile memory
 - `examples/ffi/ffi_rand_demo.ot` - Random number generation
 - `examples/ffi/ffi_rand_advanced.ot` - Advanced FFI usage
 
+### Unit Testing (Examples)
+
+Below are illustrative examples of how unit tests will look in OtterLang. A built-in `otter test` runner is planned (see `roadmap.md`).
+
+```otter
+use otter:fmt
+
+struct User:
+    id: int
+    name: str
+
+fn make_users() -> list<User>:
+    return [User(id=1, name="Ana"), User(id=2, name="Bo")] 
+
+fn to_map(users: list<User>) -> dict<int, str>:
+    let m = { }
+    for u in users:
+        m[u.id] = u.name
+    return m
+
+fn test_user_list_basic():
+    let xs = make_users()
+    assert len(xs) == 2
+    assert xs[0].name == "Ana"
+
+fn test_dict_building():
+    let m = to_map(make_users())
+    assert m[1] == "Ana"
+    assert m.get(3, default="none") == "none"
+
+fn test_nested_structs_and_lists():
+    struct Team:
+        name: str
+        members: list<User>
+
+    let team = Team(name="core", members=make_users())
+    assert team.members[1].id == 2
+```
+
+The test runner will discover functions prefixed with `test_` and report pass/fail results with spans and diffs.
+
 ## Status
 
 **Early Access (v0.1.0)** - Experimental, not production-ready.
