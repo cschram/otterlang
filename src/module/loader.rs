@@ -48,7 +48,7 @@ impl ModuleExports {
     }
 }
 
-/// Loads and caches .otter module files
+/// Loads and caches .ot module files
 pub struct ModuleLoader {
     cache: HashMap<PathBuf, Module>,
     resolver: ModuleResolver,
@@ -175,7 +175,7 @@ mod tests {
     #[test]
     fn test_module_loader() {
         let temp_dir = TempDir::new().unwrap();
-        let module_path = temp_dir.path().join("test.otter");
+        let module_path = temp_dir.path().join("test.ot");
 
         fs::write(&module_path, "fn main:\n    print(\"test\")\n").unwrap();
 

@@ -90,7 +90,7 @@ if command -v otter &> /dev/null; then
     echo ""
     echo -e "${BLUE}Try it out:${NC}"
     echo -e "  ${GREEN}otter --help${NC}"
-    echo -e "  ${GREEN}otter run examples/hello.otter${NC}"
+    echo -e "  ${GREEN}otter run examples/hello.ot${NC}"
     echo ""
 else
     echo -e "${YELLOW}⚠️  Installation complete, but 'otter' command not found in PATH${NC}"

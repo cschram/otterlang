@@ -1,7 +1,7 @@
 {
   "name": "OtterLang",
   "scopeName": "source.otter",
-  "fileTypes": ["otter"],
+  "fileTypes": ["ot"],
   "patterns": [
     {
       "include": "#comments"

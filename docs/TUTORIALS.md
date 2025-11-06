@@ -23,7 +23,7 @@ See the main [README](../README.md) for installation instructions.
 
 ## Your First Program
 
-Create a file `hello.otter`:
+Create a file `hello.ot`:
 
 ```otter
 fn main:
@@ -33,7 +33,7 @@ fn main:
 Run it:
 
 ```bash
-otter run hello.otter
+otter run hello.ot
 ```
 
 ## Variables and Types

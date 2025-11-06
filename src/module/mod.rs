@@ -1,6 +1,6 @@
 //! Module system for OtterLang
 //!
-//! Handles module resolution, loading, and dependency tracking for .otter files
+//! Handles module resolution, loading, and dependency tracking for .ot files
 
 pub mod loader;
 pub mod processor;

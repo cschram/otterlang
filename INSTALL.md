@@ -6,13 +6,13 @@ The `otter` command is now installed and ready to use!
 
 ```bash
 # Run a program
-otter run examples/hello.otter
+otter run examples/hello.ot
 
 # Build an executable
-otter build examples/hello.otter
+otter build examples/hello.ot
 
 # Profile memory usage
-otter profile memory examples/hello.otter
+otter profile memory examples/hello.ot
 
 # List benchmarks
 otter bench list examples
@@ -40,22 +40,22 @@ export PATH="$HOME/.cargo/bin:$PATH"
 
 ```bash
 # Run with debug output
-otter run examples/hello.otter --debug
+otter run examples/hello.ot --debug
 
 # Run with timing information
-otter run examples/hello.otter --time
+otter run examples/hello.ot --time
 
 # Build optimized release binary
-otter build examples/hello.otter --release
+otter build examples/hello.ot --release
 
 # Dump tokens during compilation
-otter run examples/hello.otter --dump-tokens
+otter run examples/hello.ot --dump-tokens
 
 # Dump AST during compilation
-otter run examples/hello.otter --dump-ast
+otter run examples/hello.ot --dump-ast
 
 # Dump LLVM IR
-otter run examples/hello.otter --dump-ir
+otter run examples/hello.ot --dump-ir
 ```
 
 ## Updating

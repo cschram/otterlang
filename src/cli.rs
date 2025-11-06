@@ -91,7 +91,7 @@ enum Command {
     Repl,
     /// Format OtterLang source code.
     Fmt {
-        /// Files to format (defaults to all .otter files in current directory)
+        /// Files to format (defaults to all .ot files in current directory)
         #[arg(default_value = ".")]
         paths: Vec<PathBuf>,
     },
@@ -601,11 +601,11 @@ fn handle_fmt(paths: &[PathBuf]) -> Result<()> {
     let formatter = Formatter::new();
     let mut formatted_count = 0;
 
-    // Collect all .otter files
+    // Collect all .ot files
     let mut files = Vec::new();
     if paths.is_empty() || (paths.len() == 1 && paths[0].to_str() == Some(".")) {
-        // Default: format all .otter files in current directory recursively
-        for entry in glob("**/*.otter")? {
+        // Default: format all .ot files in current directory recursively
+        for entry in glob("**/*.ot")? {
             if let Ok(path) = entry {
                 files.push(path);
             }
@@ -613,12 +613,12 @@ fn handle_fmt(paths: &[PathBuf]) -> Result<()> {
     } else {
         for path in paths {
             if path.is_dir() {
-                for entry in glob(&format!("{}/**/*.otter", path.display()))? {
+                for entry in glob(&format!("{}/**/*.ot", path.display()))? {
                     if let Ok(p) = entry {
                         files.push(p);
                     }
                 }
-            } else if path.extension().map_or(false, |ext| ext == "otter") {
+            } else if path.extension().map_or(false, |ext| ext == "ot") {
                 files.push(path.clone());
             }
         }

@@ -132,6 +132,7 @@ struct LoopContext<'ctx> {
 struct FunctionContext<'ctx> {
     variables: HashMap<String, Variable<'ctx>>,
     loop_stack: Vec<LoopContext<'ctx>>,
+    entry_block: Option<BasicBlock<'ctx>>,
 }
 
 impl<'ctx> FunctionContext<'ctx> {
@@ -139,7 +140,12 @@ impl<'ctx> FunctionContext<'ctx> {
         Self {
             variables: HashMap::new(),
             loop_stack: Vec::new(),
+            entry_block: None,
         }
+    }
+
+    fn set_entry_block(&mut self, entry: BasicBlock<'ctx>) {
+        self.entry_block = Some(entry);
     }
 
     fn push_loop(&mut self, continue_bb: BasicBlock<'ctx>, break_bb: BasicBlock<'ctx>) {
@@ -894,6 +900,7 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
         self.builder.position_at_end(entry);
 
         let mut ctx = FunctionContext::new();
+        ctx.set_entry_block(entry);
 
         // Store parameters as local variables
         for (i, param) in function.params.iter().enumerate() {
@@ -1030,17 +1037,86 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                     .clone()
                     .ok_or_else(|| anyhow!("expected value for `{name}`"))?;
 
-                let ty = self.basic_type(evaluated.ty)?;
-                let alloca = self.builder.build_alloca(ty, name);
-                self.builder.build_store(alloca, value);
+                // Check if variable already exists (reassignment)
+                let (alloca, needs_coercion) = if let Some(existing_var) = ctx.get(&name) {
+                    // Variable exists - reuse its alloca and handle type coercion
+                    let mut eval = evaluated;
+                    match (existing_var.ty, eval.ty) {
+                        (t1, t2) if t1 == t2 => {
+                            // Same type - no conversion needed
+                        }
+                        (OtterType::I64, OtterType::I32) => {
+                            let int_val = eval
+                                .value
+                                .clone()
+                                .ok_or_else(|| anyhow!("missing value"))?
+                                .into_int_value();
+                            let ext_val = self.builder.build_int_s_extend(
+                                int_val,
+                                self.context.i64_type(),
+                                "coerce_i32_to_i64",
+                            );
+                            eval = EvaluatedValue::with_value(ext_val.into(), OtterType::I64);
+                        }
+                        (OtterType::F64, OtterType::I64) | (OtterType::F64, OtterType::I32) => {
+                            let int_val = eval
+                                .value
+                                .clone()
+                                .ok_or_else(|| anyhow!("missing value"))?
+                                .into_int_value();
+                            let float_val = self.builder.build_signed_int_to_float(
+                                int_val,
+                                self.context.f64_type(),
+                                "coerce_int_to_f64",
+                            );
+                            eval = EvaluatedValue::with_value(float_val.into(), OtterType::F64);
+                        }
+                        _ => {
+                            bail!(
+                                "type mismatch assigning to `{name}`: existing {:?}, new {:?}",
+                                existing_var.ty,
+                                eval.ty
+                            );
+                        }
+                    }
+                    let coerced_value = eval
+                        .value
+                        .clone()
+                        .ok_or_else(|| anyhow!("missing value"))?;
+                    (existing_var.ptr, coerced_value)
+                } else {
+                    // New variable - create alloca in entry block
+                    let ty = self.basic_type(evaluated.ty)?;
+                    
+                    let current_block = self.builder.get_insert_block();
+                    let entry_block = ctx.entry_block.ok_or_else(|| {
+                        anyhow!("entry block not set in function context")
+                    })?;
+                    
+                    let first_inst = entry_block.get_first_instruction();
+                    
+                    if let Some(inst) = first_inst {
+                        self.builder.position_before(&inst);
+                    } else {
+                        self.builder.position_at_end(entry_block);
+                    }
+                    let alloca = self.builder.build_alloca(ty, &name);
+                    
+                    if let Some(block) = current_block {
+                        self.builder.position_at_end(block);
+                    }
+                    
+                    ctx.insert(
+                        name.clone(),
+                        Variable {
+                            ptr: alloca,
+                            ty: evaluated.ty,
+                        },
+                    );
+                    (alloca, value)
+                };
 
-                ctx.insert(
-                    name.clone(),
-                    Variable {
-                        ptr: alloca,
-                        ty: evaluated.ty,
-                    },
-                );
+                self.builder.build_store(alloca, needs_coercion);
                 Ok(())
             }
             Statement::If {
@@ -1353,6 +1429,7 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                 }
 
                 let (ptr, evaluated) = if let Some(variable) = ctx.get(name) {
+                    // Variable exists - use its existing alloca
                     // Allow type coercions in assignment
                     let mut eval = evaluated;
                     match (variable.ty, eval.ty) {
@@ -1396,16 +1473,9 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                     }
                     (variable.ptr, eval)
                 } else {
-                    let ty = self.basic_type(evaluated.ty)?;
-                    let alloca = self.builder.build_alloca(ty, name);
-                    ctx.insert(
-                        name.clone(),
-                        Variable {
-                            ptr: alloca,
-                            ty: evaluated.ty,
-                        },
-                    );
-                    (alloca, evaluated)
+                    // Variable doesn't exist - assignments require pre-declared variables
+                    // This should not happen for properly declared variables
+                    bail!("cannot assign to undeclared variable `{name}`. Use `let {name} = ...` to declare it first.");
                 };
 
                 let value = evaluated

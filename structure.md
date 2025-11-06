@@ -11,9 +11,9 @@ otterlang/
 │       ├── ci.yml          # Continuous integration
 │       └── release.yml     # Release automation
 ├── examples/               # Example OtterLang programs
-│   ├── hello.otter
-│   ├── advanced_pipeline.otter
-│   ├── task_benchmark.otter
+│   ├── hello.ot
+│   ├── advanced_pipeline.ot
+│   ├── task_benchmark.ot
 │   └── ...
 ├── ffi/                    # FFI bridge definitions
 │   ├── chrono/             # Chrono crate bridge
@@ -99,15 +99,15 @@ otterlang/
 │       ├── profiler.rs     # Profiling utilities
 │       └── timer.rs        # Timing utilities
 ├── stdlib/otter/           # OtterLang standard library source
-│   ├── builtins.otter
-│   ├── io.otter
-│   ├── json.otter
-│   ├── math.otter
-│   ├── net.otter
-│   ├── rand.otter
-│   ├── runtime.otter
-│   ├── task.otter
-│   └── time.otter
+│   ├── builtins.ot
+│   ├── io.ot
+│   ├── json.ot
+│   ├── math.ot
+│   ├── net.ot
+│   ├── rand.ot
+│   ├── runtime.ot
+│   ├── task.ot
+│   └── time.ot
 ├── tests/                  # Integration tests
 │   ├── cache_tests.rs
 │   ├── ffi_tests.rs

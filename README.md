@@ -47,14 +47,14 @@ cargo build --release
 ./setup.sh
 
 # Create and run your first program
-cat > hello.otter << 'EOF'
+cat > hello.ot << 'EOF'
 use otter:fmt
 
 fn main():
     fmt.println("Hello from OtterLang!")
 EOF
 
-otter run hello.otter
+otter run hello.ot
 ```
 
 ## Installation
@@ -202,49 +202,37 @@ fn nested_exceptions():
 
 ## Performance
 
-Benchmarked against C and Rust (100M iterations):
-
-| Language | Time | Relative to C |
-|----------|------|---------------|
-| C | 0.070s | 1.00x |
-| Rust | 0.080s | 1.14x |
-| **OtterLang** | **0.090s** | **1.28x** |
-
-Run `examples/benchmarks/benchmark.sh` to test yourself.
+**Note:** Benchmarks are currently being retested and properly specified. Comprehensive performance metrics will be available in a future update. OtterLang compiles to native code via LLVM and is designed for high performance, with automatic memory management and zero-cost abstractions.
 
 ## CLI Commands
 
 ```bash
-otterlang run program.otter          # Run program
-otterlang build program.otter -o out # Build executable
-otterlang fmt                        # Format code
-otterlang repl                       # Start REPL
-otterlang profile memory program.otter # Profile memory
+otterlang run program.ot          # Run program
+otterlang build program.ot -o out # Build executable
+otterlang fmt                      # Format code
+otterlang repl                     # Start REPL
+otterlang profile memory program.ot # Profile memory
 ```
 
 ## Examples
 
 **Basic Programs:**
-- `examples/basic/hello.otter` - Hello world
-- `examples/basic/exception_basics.otter` - Exception handling basics
-- `examples/basic/exception_advanced.otter` - Advanced exceptions
-- `examples/basic/exception_resource.otter` - Resource management
-- `examples/basic/exception_validation.otter` - Data validation
-- `examples/basic/struct_methods_demo.otter` - Struct methods
-- `examples/basic/struct_demo.otter` - Struct usage
-- `examples/basic/advanced_pipeline.otter` - Complex computation
-- `examples/basic/task_benchmark.otter` - Task benchmarks
-- `examples/basic/fibonacci.otter` - Fibonacci sequence
-- `examples/basic/pythonic_demo.otter` - Pythonic style
-- `examples/basic/multiline_test.otter` - Multi-line strings
+- `examples/basic/hello.ot` - Hello world
+- `examples/basic/exception_basics.ot` - Exception handling basics
+- `examples/basic/exception_advanced.ot` - Advanced exceptions
+- `examples/basic/exception_resource.ot` - Resource management
+- `examples/basic/exception_validation.ot` - Data validation
+- `examples/basic/struct_methods_demo.ot` - Struct methods
+- `examples/basic/struct_demo.ot` - Struct usage
+- `examples/basic/advanced_pipeline.ot` - Complex computation
+- `examples/basic/task_benchmark.ot` - Task benchmarks
+- `examples/basic/fibonacci.ot` - Fibonacci sequence
+- `examples/basic/pythonic_demo.ot` - Pythonic style
+- `examples/basic/multiline_test.ot` - Multi-line strings
 
 **FFI Examples:**
-- `examples/ffi/ffi_rand_demo.otter` - Random number generation
-- `examples/ffi/ffi_rand_advanced.otter` - Advanced FFI usage
-
-**Benchmarks:**
-- `examples/benchmarks/pi_leibniz.otter` - Performance comparison
-- `examples/benchmarks/benchmark.sh` - Run benchmarks
+- `examples/ffi/ffi_rand_demo.ot` - Random number generation
+- `examples/ffi/ffi_rand_advanced.ot` - Advanced FFI usage
 
 ## Status
 

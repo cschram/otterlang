@@ -43,7 +43,7 @@ impl ModulePath {
                 let stdlib =
                     stdlib_dir.ok_or_else(|| anyhow!("stdlib directory not configured"))?;
                 let mut path = stdlib.join(name);
-                path.set_extension("otter");
+                path.set_extension("ot");
 
                 if path.exists() {
                     Ok(path)
@@ -58,13 +58,13 @@ impl ModulePath {
             ModulePath::Relative(rel_path) => {
                 let resolved = source_dir.join(rel_path);
                 let mut path = if resolved.is_dir() {
-                    resolved.join("mod.otter")
+                    resolved.join("mod.ot")
                 } else {
                     resolved
                 };
 
-                if !path.exists() && !path.extension().map_or(false, |ext| ext == "otter") {
-                    path.set_extension("otter");
+                if !path.exists() && !path.extension().map_or(false, |ext| ext == "ot") {
+                    path.set_extension("ot");
                 }
 
                 if path.exists() {
@@ -77,13 +77,13 @@ impl ModulePath {
             }
             ModulePath::Absolute(abs_path) => {
                 let mut path = if abs_path.is_dir() {
-                    abs_path.join("mod.otter")
+                    abs_path.join("mod.ot")
                 } else {
                     abs_path.clone()
                 };
 
-                if !path.exists() && !path.extension().map_or(false, |ext| ext == "otter") {
-                    path.set_extension("otter");
+                if !path.exists() && !path.extension().map_or(false, |ext| ext == "ot") {
+                    path.set_extension("ot");
                 }
 
                 if path.exists() {

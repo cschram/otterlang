@@ -175,8 +175,8 @@ mod tests {
         let source_dir = temp_dir.path().join("src");
         fs::create_dir_all(&source_dir).unwrap();
 
-        let main_file = source_dir.join("main.otter");
-        let math_file = source_dir.join("math.otter");
+        let main_file = source_dir.join("main.ot");
+        let math_file = source_dir.join("math.ot");
 
         fs::write(&main_file, "use ./math\nfn main:\n    print(\"test\")\n").unwrap();
         fs::write(

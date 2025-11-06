@@ -330,7 +330,7 @@ fn main:
 Enable debug logging to see bridge generation:
 
 ```bash
-OTTER_LOG=debug otter run my_program.otter
+OTTER_LOG=debug otter run my_program.ot
 ```
 
 This shows:
