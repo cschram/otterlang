@@ -53,14 +53,14 @@
             ];
 
             shellHook = ''
-              export PATH="${rustToolchain}/bin:$PATH"
+              export PATH="${rustToolchain}/bin:${llvmPackages.llvm}/bin:$PATH"
             '';
 
             RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
 
-            LLVM_SYS_170_PREFIX = "${llvmPackages}";
-            LD_LIBRARY_PATH = "${llvmPackages}/lib";
-            LIBRARY_PATH = "${llvmPackages}/lib";
+            LLVM_SYS_170_PREFIX = "${llvmPackages.llvm}";
+            LD_LIBRARY_PATH = "${llvmPackages.llvm}/lib";
+            LIBRARY_PATH = "${llvmPackages.llvm}/lib";
 
             RUSTFLAGS =
               "-Zshare-generics=y" + lib.optionalString (hasInfix "linux" system) " -Clink-arg=-fuse-ld=mold";
