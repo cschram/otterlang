@@ -62,10 +62,23 @@ jobs:
           "LLVM_SYS_181_PREFIX=$llvmPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "LIBCLANG_PATH=$llvmPath\\bin" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "LLVM_HOME=$llvmPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $llvmConfig = Join-Path $llvmPath "bin/llvm-config.exe"
+          if (-not (Test-Path $llvmConfig)) {
+            throw "llvm-config.exe was not found under $llvmPath. The llvm-sys crate requires it."
+          }
+          "LLVM_CONFIG_PATH=$llvmConfig" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "$llvmPath\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
           Write-Host "Clang version:"
           & "$llvmPath\bin\clang.exe" --version
+
+      - name: Verify LLVM install (Windows)
+        if: ${{ matrix.os == 'windows-latest' }}
+        shell: pwsh
+        run: |
+          Write-Host "LLVM_SYS_181_PREFIX=$env:LLVM_SYS_181_PREFIX"
+          Write-Host "LLVM_CONFIG_PATH=$env:LLVM_CONFIG_PATH"
+          & "$env:LLVM_CONFIG_PATH" --version
       
       - name: Cache Cargo dependencies
         uses: actions/cache@v4
