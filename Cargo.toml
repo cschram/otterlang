@@ -25,6 +25,10 @@ default = []
 task-runtime = []
 
 [dependencies]
+common.path = "crates/common"
+utils.path = "crates/utils"
+lexer.path = "crates/lexer"
+
 anyhow = "1.0"
 tempfile = "3.10"
 ariadne = "0.3"
@@ -62,4 +66,8 @@ tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 tower-lsp = "0.20"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std"] }
 
-[dev-dependencies]
+[workspace]
+resolver = "3"
+members = [
+    "crates/*"
+]
