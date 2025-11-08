@@ -63,19 +63,19 @@ nix develop
 cargo build --release
 ```
 
-The Nix flake automatically provides Rust nightly, LLVM 15, and all dependencies.
+The Nix flake automatically provides Rust nightly, LLVM 18, and all dependencies.
 
 ### Manual Setup
 
 **Prerequisites:**
 - Rust (via rustup) - nightly required for FFI features
-- LLVM 15
+- LLVM 18
 
 **macOS:**
 ```bash
-brew install llvm@15
-export LLVM_SYS_150_PREFIX=$(brew --prefix llvm@15)
-export PATH="$LLVM_SYS_150_PREFIX/bin:$PATH"
+brew install llvm@18
+export LLVM_SYS_180_PREFIX=$(brew --prefix llvm@18)
+export PATH="$LLVM_SYS_180_PREFIX/bin:$PATH"
 rustup toolchain install nightly
 rustup default nightly
 cargo build --release
@@ -83,8 +83,8 @@ cargo build --release
 
 **Ubuntu/Debian:**
 ```bash
-sudo apt-get install -y llvm-15 llvm-15-dev clang-15
-export LLVM_SYS_150_PREFIX=/usr/lib/llvm-15
+sudo apt-get install -y llvm-18 llvm-18-dev clang-18
+export LLVM_SYS_180_PREFIX=/usr/lib/llvm-18
 rustup toolchain install nightly
 rustup default nightly
 cargo build --release
@@ -283,7 +283,7 @@ The test runner will discover functions prefixed with `test_` and report pass/fa
 - Type inference is limited (explicit types recommended)
 - Module system has some limitations
 - Windows support is experimental
-- Requires LLVM 15 and Rust nightly (for FFI features)
+- Requires LLVM 18 and Rust nightly (for FFI features)
 
 ## Contributing
 
