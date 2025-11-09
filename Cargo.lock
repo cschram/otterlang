@@ -1251,6 +1251,13 @@ dependencies = [
 [[package]]
 name = "parser"
 version = "0.1.0"
+dependencies = [
+ "ast",
+ "chumsky",
+ "common",
+ "lexer",
+ "utils",
+]
 
 [[package]]
 name = "paste"
