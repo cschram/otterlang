@@ -377,13 +377,13 @@ pub fn build_executable(
         cc.arg("-flto");
         // Note: clang doesn't support -flto=O2/O3, use -O flags instead
         match options.opt_level {
-            CodegenOptLevel::None => {}
+            CodegenOptLevel::None => {},
             CodegenOptLevel::Default => {
                 cc.arg("-O2");
-            }
+            },
             CodegenOptLevel::Aggressive => {
                 cc.arg("-O3");
-            }
+            },
         }
     }
 
@@ -604,13 +604,13 @@ pub fn build_shared_library(
         cc.arg("-flto");
         // Note: clang doesn't support -flto=O2/O3, use -O flags instead
         match options.opt_level {
-            CodegenOptLevel::None => {}
+            CodegenOptLevel::None => {},
             CodegenOptLevel::Default => {
                 cc.arg("-O2");
-            }
+            },
             CodegenOptLevel::Aggressive => {
                 cc.arg("-O3");
-            }
+            },
         }
     }
 
