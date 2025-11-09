@@ -119,7 +119,21 @@ fn type_parser() -> impl Parser<TokenKind, Type, Error = Simple<TokenKind>> {
                     .or_not(),
             )
             .map(|(base, args)| match args {
-                Some(args) => Type::Generic { base, args },
+                Some(args) => {
+                    if base.eq_ignore_ascii_case("option") && args.len() == 1 {
+                        Type::Option(Box::new(args.into_iter().next().unwrap()))
+                    } else if base.eq_ignore_ascii_case("result") && args.len() == 2 {
+                        let mut iter = args.into_iter();
+                        let ok = iter.next().unwrap();
+                        let err = iter.next().unwrap();
+                        Type::Result {
+                            ok: Box::new(ok),
+                            err: Box::new(err),
+                        }
+                    } else {
+                        Type::Generic { base, args }
+                    }
+                }
                 None => Type::Simple(base),
             })
     })

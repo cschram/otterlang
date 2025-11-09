@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use ast::nodes::Type;
 
+use crate::language::LanguageFeatureFlags;
+
 /// Represents a type in the type system
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeInfo {
@@ -36,6 +38,19 @@ pub enum TypeInfo {
     Struct {
         name: String,
         fields: HashMap<String, TypeInfo>,
+    },
+    /// Optional value type
+    Option(Box<TypeInfo>),
+    /// Result type storing success and error payloads
+    Result {
+        ok: Box<TypeInfo>,
+        err: Box<TypeInfo>,
+    },
+    /// Strong type alias (newtype-style)
+    Alias {
+        name: String,
+        underlying: Box<TypeInfo>,
+        is_public: bool,
     },
     /// Unknown type (needs inference)
     Unknown,
@@ -86,6 +101,22 @@ impl TypeInfo {
                     .iter()
                     .map(|(k, v)| (k.clone(), v.substitute(substitutions)))
                     .collect(),
+            },
+            TypeInfo::Option(inner) => {
+                TypeInfo::Option(Box::new(inner.substitute(substitutions)))
+            }
+            TypeInfo::Result { ok, err } => TypeInfo::Result {
+                ok: Box::new(ok.substitute(substitutions)),
+                err: Box::new(err.substitute(substitutions)),
+            },
+            TypeInfo::Alias {
+                name,
+                underlying,
+                is_public,
+            } => TypeInfo::Alias {
+                name: name.clone(),
+                underlying: Box::new(underlying.substitute(substitutions)),
+                is_public: *is_public,
             },
             _ => self.clone(),
         }
@@ -140,6 +171,25 @@ impl TypeInfo {
             (TypeInfo::Dict { key: k1, value: v1 }, TypeInfo::Dict { key: k2, value: v2 }) => {
                 k1.is_compatible_with(k2) && v1.is_compatible_with(v2)
             }
+            (TypeInfo::Option(inner_a), TypeInfo::Option(inner_b)) => {
+                inner_a.is_compatible_with(inner_b)
+            }
+            (
+                TypeInfo::Result { ok: ok1, err: err1 },
+                TypeInfo::Result { ok: ok2, err: err2 },
+            ) => ok1.is_compatible_with(ok2) && err1.is_compatible_with(err2),
+            (
+                TypeInfo::Alias {
+                    underlying: alias, ..
+                },
+                other,
+            ) => alias.is_compatible_with(other),
+            (
+                other,
+                TypeInfo::Alias {
+                    underlying: alias, ..
+                },
+            ) => other.is_compatible_with(alias),
 
             // Function types must match signature
             (
@@ -223,6 +273,11 @@ impl TypeInfo {
                     format!("{} {{ {} }}", name, fields_str)
                 }
             }
+            TypeInfo::Option(inner) => format!("Option<{}>", inner.display_name()),
+            TypeInfo::Result { ok, err } => {
+                format!("Result<{}, {}>", ok.display_name(), err.display_name())
+            }
+            TypeInfo::Alias { name, .. } => name.clone(),
             TypeInfo::Unknown => "?".to_string(),
             TypeInfo::Error => "<error>".to_string(),
         }
@@ -267,6 +322,11 @@ impl From<&Type> for TypeInfo {
                     base: base.clone(),
                     args: args.iter().map(|t| t.into()).collect(),
                 },
+            },
+            Type::Option(inner) => TypeInfo::Option(Box::new(inner.as_ref().into())),
+            Type::Result { ok, err } => TypeInfo::Result {
+                ok: Box::new(ok.as_ref().into()),
+                err: Box::new(err.as_ref().into()),
             },
         }
     }
@@ -350,16 +410,23 @@ pub struct TypeContext {
     pub structs: HashMap<String, HashMap<String, TypeInfo>>,
     /// Type aliases: name -> actual type
     pub type_aliases: HashMap<String, TypeInfo>,
+    /// Active language feature flags
+    pub features: LanguageFeatureFlags,
 }
 
 impl TypeContext {
     pub fn new() -> Self {
+        Self::with_features(LanguageFeatureFlags::default())
+    }
+
+    pub fn with_features(features: LanguageFeatureFlags) -> Self {
         Self {
             variables: HashMap::new(),
             functions: HashMap::new(),
             generic_params: Vec::new(),
             structs: HashMap::new(),
             type_aliases: HashMap::new(),
+            features,
         }
     }
 
@@ -408,12 +475,25 @@ impl TypeContext {
         self.structs.get(name)
     }
 
-    pub fn define_type_alias(&mut self, name: String, ty: TypeInfo) {
-        self.type_aliases.insert(name, ty);
+    pub fn define_type_alias(&mut self, name: String, ty: TypeInfo, is_public: bool) {
+        let stored_type = if self.features.newtype_aliases {
+            TypeInfo::Alias {
+                name: name.clone(),
+                underlying: Box::new(ty),
+                is_public,
+            }
+        } else {
+            ty
+        };
+        self.type_aliases.insert(name, stored_type);
     }
 
     pub fn resolve_type_alias(&self, name: &str) -> Option<&TypeInfo> {
         self.type_aliases.get(name)
+    }
+
+    pub fn set_language_features(&mut self, features: LanguageFeatureFlags) {
+        self.features = features;
     }
 }
 

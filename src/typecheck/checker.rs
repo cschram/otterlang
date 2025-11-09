@@ -1,6 +1,7 @@
 use anyhow::{bail, Result};
 use std::collections::HashMap;
 
+use crate::language::LanguageFeatureFlags;
 use crate::runtime::symbol_registry::{FfiType, SymbolRegistry};
 use crate::typecheck::types::{TypeContext, TypeError, TypeInfo};
 use ast::nodes::{Block, Expr, Function, Literal, Program, Statement};
@@ -11,6 +12,7 @@ pub struct TypeChecker {
     context: TypeContext,
     registry: Option<&'static SymbolRegistry>,
     expr_types: HashMap<usize, TypeInfo>,
+    features: LanguageFeatureFlags,
 }
 
 impl TypeChecker {
@@ -20,20 +22,25 @@ impl TypeChecker {
     }
 
     pub fn new() -> Self {
-        let mut context = TypeContext::new();
+        Self::with_language_features(LanguageFeatureFlags::default())
+    }
+
+    pub fn with_language_features(features: LanguageFeatureFlags) -> Self {
+        let mut context = TypeContext::with_features(features.clone());
 
         // Register built-in functions
         Self::register_builtins(&mut context);
 
         // Common type aliases (language-level names to internal types)
-        context.define_type_alias("float".to_string(), TypeInfo::F64);
-        context.define_type_alias("int".to_string(), TypeInfo::I32);
-        context.define_type_alias("number".to_string(), TypeInfo::F64);
-        context.define_type_alias("None".to_string(), TypeInfo::Unit);
-        context.define_type_alias("unit".to_string(), TypeInfo::Unit);
+        context.define_type_alias("float".to_string(), TypeInfo::F64, true);
+        context.define_type_alias("int".to_string(), TypeInfo::I32, true);
+        context.define_type_alias("number".to_string(), TypeInfo::F64, true);
+        context.define_type_alias("None".to_string(), TypeInfo::Unit, true);
+        context.define_type_alias("unit".to_string(), TypeInfo::Unit, true);
         context.define_type_alias(
             "list".to_string(),
             TypeInfo::List(Box::new(TypeInfo::Unknown)),
+            true,
         );
         context.define_type_alias(
             "dict".to_string(),
@@ -41,14 +48,16 @@ impl TypeChecker {
                 key: Box::new(TypeInfo::Unknown),
                 value: Box::new(TypeInfo::Unknown),
             },
+            true,
         );
-        context.define_type_alias("Error".to_string(), TypeInfo::Error);
+        context.define_type_alias("Error".to_string(), TypeInfo::Error, true);
 
         Self {
             errors: Vec::new(),
             context,
             registry: None,
             expr_types: HashMap::new(),
+            features,
         }
     }
 
@@ -163,9 +172,10 @@ impl TypeChecker {
                         self.context.pop_generic();
                     }
                 }
-                Statement::TypeAlias { name, target, .. } => {
+                Statement::TypeAlias { name, target, public, .. } => {
                     let ty = TypeInfo::from(target);
-                    self.context.define_type_alias(name.clone(), ty);
+                    self.context
+                        .define_type_alias(name.clone(), ty, *public);
                 }
                 _ => {}
             }
@@ -301,7 +311,7 @@ impl TypeChecker {
 
     /// Type check a function
     fn check_function(&mut self, function: &Function) -> Result<()> {
-        let mut fn_context = TypeContext::new();
+        let mut fn_context = TypeContext::with_features(self.features.clone());
 
         // Add function parameters to context
         for param in &function.params {
@@ -384,6 +394,13 @@ impl TypeChecker {
                 for arg in args {
                     self.extract_generic_params(arg, params);
                 }
+            }
+            ast::nodes::Type::Option(inner) => {
+                self.extract_generic_params(inner, params);
+            }
+            ast::nodes::Type::Result { ok, err } => {
+                self.extract_generic_params(ok, params);
+                self.extract_generic_params(err, params);
             }
         }
     }

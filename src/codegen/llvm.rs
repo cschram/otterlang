@@ -1069,6 +1069,8 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                     _ => bail!("unknown generic type: {}", base),
                 }
             }
+            Type::Option(_) => bail!("Option types are not supported in codegen yet"),
+            Type::Result { .. } => bail!("Result types are not supported in codegen yet"),
         }
     }
 

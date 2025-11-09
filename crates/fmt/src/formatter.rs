@@ -530,6 +530,16 @@ impl Formatter {
                     format!("{}<{}>", base, args_str)
                 }
             }
+            ast::nodes::Type::Option(inner) => {
+                format!("Option<{}>", self.format_type(inner))
+            }
+            ast::nodes::Type::Result { ok, err } => {
+                format!(
+                    "Result<{}, {}>",
+                    self.format_type(ok),
+                    self.format_type(err)
+                )
+            }
         }
     }
 

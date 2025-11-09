@@ -11,6 +11,7 @@ use tracing::{debug, info, warn};
 use crate::codegen::{
     self, build_executable, BuildArtifact, CodegenOptLevel, CodegenOptions, TargetTriple,
 };
+use crate::language::LanguageFeatureFlags;
 use crate::module::ModuleProcessor;
 use crate::runtime::ffi;
 use crate::typecheck::TypeChecker;
@@ -68,6 +69,10 @@ pub struct OtterCli {
     #[arg(long, global = true)]
     /// Disable cache for this compilation.
     no_cache: bool,
+
+    #[arg(long, global = true, value_name = "list")]
+    /// Enable experimental language features (comma-separated names or use OTTER_FEATURES env var).
+    features: Option<String>,
 
     #[arg(long, global = true)]
     /// Target triple for cross-compilation (e.g., wasm32-unknown-unknown, thumbv7m-none-eabi)
@@ -295,8 +300,10 @@ fn compile_pipeline(
     })?;
 
     // Type check the program
-    let mut type_checker =
-        TypeChecker::new().with_registry(crate::runtime::symbol_registry::SymbolRegistry::global());
+    let mut type_checker = TypeChecker::with_language_features(
+        settings.language_features().clone(),
+    )
+    .with_registry(crate::runtime::symbol_registry::SymbolRegistry::global());
     let type_check_result =
         profiler.record_phase("Type Checking", || type_checker.check_program(&program));
 
@@ -412,10 +419,12 @@ struct CompilationSettings {
     enable_cache: bool,
     cache_dir: PathBuf,
     max_cache_size: usize,
+    language_features: LanguageFeatureFlags,
 }
 
 impl CompilationSettings {
     fn from_cli(cli: &OtterCli) -> Self {
+        let language_features = resolve_language_features(cli);
         Self {
             dump_tokens: cli.dump_tokens,
             dump_ast: cli.dump_ast,
@@ -432,6 +441,7 @@ impl CompilationSettings {
             enable_cache: !cli.no_cache,
             cache_dir: PathBuf::from("./cache"),
             max_cache_size: 1024 * 1024 * 1024, // 1GB default
+            language_features,
         }
     }
 
@@ -473,6 +483,57 @@ impl CompilationSettings {
             target,
         }
     }
+
+    fn language_features(&self) -> &LanguageFeatureFlags {
+        &self.language_features
+    }
+}
+
+fn resolve_language_features(cli: &OtterCli) -> LanguageFeatureFlags {
+    let mut flags = LanguageFeatureFlags::default();
+
+    if let Ok(env_value) = std::env::var("OTTER_FEATURES") {
+        apply_feature_list(&env_value, &mut flags, "OTTER_FEATURES");
+    }
+
+    if let Some(cli_value) = cli.features.as_deref() {
+        apply_feature_list(cli_value, &mut flags, "--features");
+    }
+
+    if flags.any_enabled() {
+        let enabled = collect_enabled_feature_names(&flags).join(", ");
+        info!("language features enabled: {}", enabled);
+    }
+
+    flags
+}
+
+fn apply_feature_list(source: &str, flags: &mut LanguageFeatureFlags, label: &str) {
+    for raw in source.split(',') {
+        for token in raw.split_whitespace() {
+            let feature = token.trim();
+            if feature.is_empty() {
+                continue;
+            }
+            if !flags.enable(feature) {
+                warn!("unknown language feature '{}' from {}", feature, label);
+            }
+        }
+    }
+}
+
+fn collect_enabled_feature_names(flags: &LanguageFeatureFlags) -> Vec<&'static str> {
+    let mut names = Vec::new();
+    if flags.result_option_core {
+        names.push(LanguageFeatureFlags::RESULT_OPTION_CORE);
+    }
+    if flags.match_exhaustiveness {
+        names.push(LanguageFeatureFlags::MATCH_EXHAUSTIVENESS);
+    }
+    if flags.newtype_aliases {
+        names.push(LanguageFeatureFlags::NEWTYPE_ALIASES);
+    }
+    names
 }
 
 fn read_source(path: &Path) -> Result<String> {

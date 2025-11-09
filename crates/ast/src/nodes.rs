@@ -72,6 +72,8 @@ impl Function {
 pub enum Type {
     Simple(String),
     Generic { base: String, args: Vec<Type> },
+    Option(Box<Type>),
+    Result { ok: Box<Type>, err: Box<Type> },
 }
 
 #[derive(Debug, Clone)]

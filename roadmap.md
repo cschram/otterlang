@@ -10,26 +10,6 @@ This roadmap outlines major areas of investment and their intended scope. Items 
 
 ---
 
-### Milestone 1: Core Language Features (HIGH PRIORITY)
-
-Essential language features needed for practical development.
-
-- **Error Handling**
-  - Add `Result<T, E>` and `Option<T>` as first-class types
-  - `?` operator to early-return on error from `Result<T, E>`
-  - Standard library helpers for mapping/combining results
-  - `panic`/`raise` for unrecoverable states with backtrace hooks
-  
-- **Pattern Matching**
-  - Exhaustive `match` on `Result`/`Option` and algebraic data types
-  - Destructuring and guards in `match` arms
-  - Type-safe pattern matching with compile-time exhaustiveness checking
-  
-- **Type System Improvements**
-  - Better type inference (reduce need for explicit type annotations)
-  - Strong type aliases (newtype pattern): `type UserId = int`
-  - Enhanced type error messages with suggestions
-
 ### Milestone 2: Essential Developer Experience (HIGH PRIORITY)
 
 Critical tooling needed for daily development workflow.
@@ -159,11 +139,6 @@ Essential for adoption and community growth.
 
 ### Acceptance Criteria (Examples)
 
-**Milestone 1: Core Language Features**
-- Error handling: A function returning `Result<T, E>` can be composed with `?`
-- Pattern matching: `match` on `Result`/`Option` is exhaustive and type-checked
-- Type system: Strong type aliases prevent type confusion at compile time (e.g., `UserId` ≠ `ProductId` even if both are `int`)
-
 **Milestone 2: Essential Developer Experience**
 - Testing: `otter test` discovers and runs tests, returning non-zero on failure
 - Testing: Assertions report clear diffs and spans
@@ -201,8 +176,7 @@ Essential for adoption and community growth.
 
 ## Priority Summary
 
-**Immediate Focus (Milestones 1-3):**
-- Core language features (error handling, pattern matching, type system)
+**Immediate Focus (Milestones 2-3):**
 - Essential developer tooling (testing, diagnostics, LSP)
 - Package management and ecosystem basics
 
@@ -225,5 +199,3 @@ These milestones provide the foundation for practical OtterLang development and 
 
 ### Feedback
 Feedback is welcome via issues and discussions. Priorities will be adjusted based on real-world usage.
-
-
