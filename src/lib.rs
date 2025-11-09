@@ -1,6 +1,5 @@
 pub mod cli;
 pub mod codegen;
-pub mod language;
 pub mod lsp;
 pub mod module;
 pub mod repl;

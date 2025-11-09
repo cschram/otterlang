@@ -974,6 +974,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "language"
+version = "0.1.0"
+
+[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1203,6 +1207,7 @@ dependencies = [
  "indicatif",
  "inkwell",
  "inventory",
+ "language",
  "lexer",
  "libc",
  "libloading 0.8.9",

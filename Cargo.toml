@@ -33,6 +33,7 @@ cache.path = "crates/cache"
 ffi.path = "crates/ffi"
 fmt.path = "crates/fmt"
 parser.path = "crates/parser"
+language.path = "crates/language"
 
 anyhow = "1.0"
 tempfile = "3.10"
