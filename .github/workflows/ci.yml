@@ -43,6 +43,12 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@nightly
 
+      - name: Setup MSVC environment
+        if: ${{ matrix.os == 'windows-latest' }}
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
       - name: Configure Rust flags (Windows)
         if: ${{ matrix.os == 'windows-latest' }}
         shell: pwsh
@@ -203,11 +209,16 @@ jobs:
             Write-Host "No .ot files found in examples directory"
             exit 0
           }
+          $failed = @()
           foreach ($example in $examples) {
             Write-Host "Running example: $($example.FullName)"
-            try {
-              cargo run --release --bin otter -- run $example.FullName
-            } catch {
-              Write-Host "Example $($example.Name) failed, continuing..."
+            cargo run --release --bin otter -- run $example.FullName
+            if ($LASTEXITCODE -ne 0) {
+              Write-Warning "Example $($example.Name) failed"
+              $failed += $example.FullName
             }
+          }
+          if ($failed.Count -gt 0) {
+            Write-Warning "The following examples failed:"
+            $failed | ForEach-Object { Write-Warning " - $_" }
           }

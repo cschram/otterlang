@@ -184,10 +184,83 @@ impl TargetTriple {
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/time.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <ctype.h>
+#ifndef _WIN32
+#include <sys/time.h>
+#include <sys/types.h>
+#else
+#define WIN32_LEAN_AND_MEAN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <BaseTsd.h>
+typedef SSIZE_T ssize_t;
+
+struct timeval {
+    long tv_sec;
+    long tv_usec;
+};
+
+static int gettimeofday(struct timeval* tv, void* tz) {
+    (void)tz;
+    if (!tv) {
+        return -1;
+    }
+    FILETIME ft;
+    ULONGLONG timestamp;
+    static const ULONGLONG EPOCH_OFFSET = 116444736000000000ULL;
+    GetSystemTimeAsFileTime(&ft);
+    timestamp = ((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
+    timestamp -= EPOCH_OFFSET;
+    tv->tv_sec = (long)(timestamp / 10000000ULL);
+    tv->tv_usec = (long)((timestamp % 10000000ULL) / 10ULL);
+    return 0;
+}
+
+static ssize_t otter_getline(char** lineptr, size_t* n, FILE* stream) {
+    if (!lineptr || !n || !stream) {
+        return -1;
+    }
+    if (*lineptr == NULL || *n == 0) {
+        *n = 128;
+        *lineptr = (char*)malloc(*n);
+        if (!*lineptr) {
+            return -1;
+        }
+    }
+
+    size_t position = 0;
+    for (;;) {
+        int c = fgetc(stream);
+        if (c == EOF) {
+            if (position == 0) {
+                return -1;
+            }
+            break;
+        }
+        if (position + 1 >= *n) {
+            size_t new_size = *n * 2;
+            char* new_ptr = (char*)realloc(*lineptr, new_size);
+            if (!new_ptr) {
+                return -1;
+            }
+            *lineptr = new_ptr;
+            *n = new_size;
+        }
+        (*lineptr)[position++] = (char)c;
+        if (c == '\n') {
+            break;
+        }
+    }
+    (*lineptr)[position] = '\0';
+    return (ssize_t)position;
+}
+
+#define getline otter_getline
+#endif
 
 int otter_is_valid_utf8(const unsigned char* str, size_t len) {
     size_t i = 0;
@@ -508,11 +581,75 @@ int otter_validate_utf8(const char* ptr) {
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
-// WASI imports (if targeting wasi)
 #ifdef __wasi__
 #include <wasi/api.h>
+#else
+__attribute__((import_module("env"), import_name("otter_write_stdout")))
+void otter_env_write_stdout(const char* ptr, uint32_t len);
+__attribute__((import_module("env"), import_name("otter_write_stderr")))
+void otter_env_write_stderr(const char* ptr, uint32_t len);
+__attribute__((import_module("env"), import_name("otter_time_now_ms")))
+int64_t otter_env_time_now_ms(void);
 #endif
+
+static void otter_write_stdout(const char* data, size_t len) {
+    if (!data || len == 0) return;
+#ifdef __wasi__
+    __wasi_ciovec_t iov = { .buf = data, .buf_len = len };
+    size_t written = 0;
+    __wasi_fd_write(1, &iov, 1, &written);
+#else
+    otter_env_write_stdout(data, (uint32_t)len);
+#endif
+}
+
+static void otter_write_stderr(const char* data, size_t len) {
+    if (!data || len == 0) return;
+#ifdef __wasi__
+    __wasi_ciovec_t iov = { .buf = data, .buf_len = len };
+    size_t written = 0;
+    __wasi_fd_write(2, &iov, 1, &written);
+#else
+    otter_env_write_stderr(data, (uint32_t)len);
+#endif
+}
+
+static char* otter_dup_slice(const char* src, size_t len) {
+    if (!src) return NULL;
+    char* out = (char*)malloc(len + 1);
+    if (!out) return NULL;
+    memcpy(out, src, len);
+    out[len] = '\0';
+    return out;
+}
+
+static char* otter_dup_cstr(const char* src) {
+    if (!src) return NULL;
+    return otter_dup_slice(src, strlen(src));
+}
+
+static char* otter_format_signed_uint(uint64_t magnitude, bool negative) {
+    char tmp[32];
+    size_t idx = 0;
+    do {
+        tmp[idx++] = (char)('0' + (magnitude % 10));
+        magnitude /= 10;
+    } while (magnitude > 0);
+
+    size_t total = idx + (negative ? 1 : 0);
+    char* buffer = (char*)malloc(total + 1);
+    if (!buffer) return NULL;
+
+    size_t pos = 0;
+    if (negative) buffer[pos++] = '-';
+    while (idx > 0) {
+        buffer[pos++] = tmp[--idx];
+    }
+    buffer[pos] = '\0';
+    return buffer;
+}
 
 int otter_is_valid_utf8(const unsigned char* str, size_t len) {
     size_t i = 0;
@@ -582,48 +719,54 @@ char* otter_normalize_text(const char* input) {
 void otter_std_io_print(const char* message) {
     if (!message) return;
     char* normalized = otter_normalize_text(message);
-    if (normalized) {
-#ifdef __wasi__
-        size_t len = strlen(normalized);
-        __wasi_fd_write(1, (const __wasi_ciovec_t[]){{.buf = normalized, .buf_len = len}}, 1, NULL);
-#else
-        // Fallback for wasm32-unknown-unknown (no WASI)
-        // Could use console.log via JavaScript interop
-#endif
-        free(normalized);
-    }
+    if (!normalized) return;
+    otter_write_stdout(normalized, strlen(normalized));
+    free(normalized);
 }
 
 void otter_std_io_println(const char* message) {
     if (!message) {
-#ifdef __wasi__
-        __wasi_fd_write(1, (const __wasi_ciovec_t[]){{.buf = "\n", .buf_len = 1}}, 1, NULL);
-#else
-        // Fallback
-#endif
+        otter_write_stdout("\n", 1);
         return;
     }
     char* normalized = otter_normalize_text(message);
-    if (normalized) {
-        size_t len = strlen(normalized);
-#ifdef __wasi__
-        __wasi_fd_write(1, (const __wasi_ciovec_t[]){{.buf = normalized, .buf_len = len}}, 1, NULL);
-        __wasi_fd_write(1, (const __wasi_ciovec_t[]){{.buf = "\n", .buf_len = 1}}, 1, NULL);
-#else
-        // Fallback
-#endif
-        free(normalized);
-    }
+    if (!normalized) return;
+    otter_write_stdout(normalized, strlen(normalized));
+    otter_write_stdout("\n", 1);
+    free(normalized);
 }
 
 char* otter_std_io_read_line() {
 #ifdef __wasi__
-    // WASI read_line implementation
-    char* line = NULL;
+    size_t capacity = 128;
+    char* buffer = (char*)malloc(capacity);
+    if (!buffer) return NULL;
     size_t len = 0;
-    // Simplified: read character by character
-    // In practice, would use WASI fd_read
-    return NULL;
+    while (1) {
+        char ch = 0;
+        __wasi_iovec_t iov = { .buf = &ch, .buf_len = 1 };
+        size_t nread = 0;
+        __wasi_errno_t err = __wasi_fd_read(0, &iov, 1, &nread);
+        if (err != __WASI_ERRNO_SUCCESS || nread == 0) break;
+        if (ch == '\r') continue;
+        if (ch == '\n') break;
+        if (len + 1 >= capacity) {
+            capacity *= 2;
+            char* tmp = (char*)realloc(buffer, capacity);
+            if (!tmp) {
+                free(buffer);
+                return NULL;
+            }
+            buffer = tmp;
+        }
+        buffer[len++] = ch;
+    }
+    if (len == 0) {
+        free(buffer);
+        return NULL;
+    }
+    buffer[len] = '\0';
+    return buffer;
 #else
     return NULL;
 #endif
@@ -635,37 +778,82 @@ void otter_std_io_free_string(char* ptr) {
 
 int64_t otter_std_time_now_ms() {
 #ifdef __wasi__
-    __wasi_timestamp_t timestamp;
-    __wasi_clock_time_get(__wasi_clockid_t_CLOCK_REALTIME, 1000000, &timestamp);
+    __wasi_timestamp_t timestamp = 0;
+    __wasi_errno_t err = __wasi_clock_time_get(__WASI_CLOCKID_REALTIME, 1000000, &timestamp);
+    if (err != __WASI_ERRNO_SUCCESS) {
+        return 0;
+    }
     return (int64_t)(timestamp / 1000000);
 #else
-    return 0;
+    return otter_env_time_now_ms();
 #endif
 }
 
-char* otter_format_float(double value) {
-    char* buffer = (char*)malloc(64);
-    if (buffer) {
-        // Simplified float formatting for WASM
-        int len = 0;
-        // Would need proper sprintf implementation or use JS interop
-    }
-    return buffer;
+char* otter_format_int(int64_t value) {
+    bool negative = value < 0;
+    uint64_t magnitude = negative ? (uint64_t)(-(value + 1)) + 1 : (uint64_t)value;
+    return otter_format_signed_uint(magnitude, negative);
 }
 
-char* otter_format_int(int64_t value) {
-    char* buffer = (char*)malloc(32);
-    if (buffer) {
-        // Simplified int formatting
+char* otter_format_float(double value) {
+    if (isnan(value)) return otter_dup_cstr("nan");
+    if (isinf(value)) return value > 0 ? otter_dup_cstr("inf") : otter_dup_cstr("-inf");
+
+    bool negative = value < 0.0;
+    if (negative) value = -value;
+
+    double int_part_d = floor(value);
+    if (int_part_d > (double)INT64_MAX) {
+        return negative ? otter_dup_cstr("-inf") : otter_dup_cstr("inf");
     }
-    return buffer;
+
+    int64_t int_part = (int64_t)int_part_d;
+    double frac = value - (double)int_part;
+    const uint64_t scale = 1000000ULL;
+    uint64_t frac_part = (uint64_t)(frac * (double)scale + 0.5);
+    if (frac_part >= scale) {
+        frac_part -= scale;
+        if (int_part < INT64_MAX) {
+            int_part += 1;
+        }
+    }
+
+    char* int_str = otter_format_signed_uint((uint64_t)int_part, negative);
+    if (!int_str) return NULL;
+
+    char frac_digits[6] = { '0','0','0','0','0','0' };
+    size_t frac_len = 0;
+    if (frac_part > 0) {
+        for (int i = 5; i >= 0; --i) {
+            frac_digits[i] = (char)('0' + (frac_part % 10));
+            frac_part /= 10;
+        }
+        frac_len = 6;
+        while (frac_len > 0 && frac_digits[frac_len - 1] == '0') {
+            frac_len--;
+        }
+    }
+
+    if (frac_len == 0) {
+        return int_str;
+    }
+
+    size_t int_len = strlen(int_str);
+    char* result = (char*)malloc(int_len + 1 + frac_len + 1);
+    if (!result) {
+        free(int_str);
+        return NULL;
+    }
+    memcpy(result, int_str, int_len);
+    result[int_len] = '.';
+    memcpy(result + int_len + 1, frac_digits, frac_len);
+    result[int_len + 1 + frac_len] = '\0';
+    free(int_str);
+    return result;
 }
 
 char* otter_format_bool(bool value) {
-    const char* str = value ? "true" : "false";
-    char* buffer = (char*)malloc(strlen(str) + 1);
-    if (buffer) strcpy(buffer, str);
-    return buffer;
+    return otter_dup_cstr(value ? "true" : "false");
 }
 
 char* otter_concat_strings(const char* s1, const char* s2) {
@@ -673,14 +861,108 @@ char* otter_concat_strings(const char* s1, const char* s2) {
     size_t len1 = strlen(s1), len2 = strlen(s2);
     char* result = (char*)malloc(len1 + len2 + 1);
     if (result) {
-        strcpy(result, s1);
-        strcat(result, s2);
+        memcpy(result, s1, len1);
+        memcpy(result + len1, s2, len2);
+        result[len1 + len2] = '\0';
     }
     return result;
 }
 
 void otter_free_string(char* ptr) {
     if (ptr) free(ptr);
+}
+
+static char* otter_last_error_message = NULL;
+static bool otter_has_error_state = false;
+
+bool otter_error_push_context() {
+    return true;
+}
+
+bool otter_error_pop_context() {
+    return true;
+}
+
+bool otter_error_raise(const char* message_ptr, size_t message_len) {
+    if (otter_last_error_message) {
+        free(otter_last_error_message);
+        otter_last_error_message = NULL;
+    }
+    if (message_ptr && message_len > 0) {
+        otter_last_error_message = otter_dup_slice(message_ptr, message_len);
+    } else {
+        const char* fallback = "Exception raised";
+        otter_last_error_message = otter_dup_cstr(fallback);
+    }
+    otter_has_error_state = true;
+    if (otter_last_error_message) {
+        otter_write_stderr("Exception: ", 11);
+        otter_write_stderr(otter_last_error_message, strlen(otter_last_error_message));
+        otter_write_stderr("\n", 1);
+    }
+    return true;
+}
+
+bool otter_error_clear() {
+    if (otter_last_error_message) {
+        free(otter_last_error_message);
+        otter_last_error_message = NULL;
+    }
+    otter_has_error_state = false;
+    return true;
+}
+
+char* otter_error_get_message() {
+    if (!otter_last_error_message) return NULL;
+    return otter_dup_cstr(otter_last_error_message);
+}
+
+bool otter_error_has_error() {
+    return otter_has_error_state;
+}
+
+void otter_error_rethrow() {
+    // Not implemented for WASM yet
+}
+
+char* otter_builtin_stringify_int(int64_t value) {
+    return otter_format_int(value);
+}
+
+char* otter_builtin_stringify_float(double value) {
+    return otter_format_float(value);
+}
+
+char* otter_builtin_stringify_bool(int value) {
+    return otter_dup_cstr(value ? "true" : "false");
+}
+
+void otter_std_fmt_println(const char* msg) {
+    otter_std_io_println(msg);
+}
+
+void otter_std_fmt_print(const char* msg) {
+    otter_std_io_print(msg);
+}
+
+void otter_std_fmt_eprintln(const char* msg) {
+    if (!msg) {
+        otter_write_stderr("\n", 1);
+        return;
+    }
+    char* normalized = otter_normalize_text(msg);
+    if (!normalized) return;
+    otter_write_stderr(normalized, strlen(normalized));
+    otter_write_stderr("\n", 1);
+    free(normalized);
+}
+
+char* otter_std_fmt_stringify_float(double value) {
+    return otter_format_float(value);
+}
+
+char* otter_std_fmt_stringify_int(int64_t value) {
+    return otter_format_int(value);
 }
 
 int otter_validate_utf8(const char* ptr) {
