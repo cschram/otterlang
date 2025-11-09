@@ -1161,6 +1161,7 @@ dependencies = [
  "anyhow",
  "ariadne",
  "ast",
+ "cache",
  "cargo_metadata",
  "chrono",
  "chumsky",
