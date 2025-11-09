@@ -1124,7 +1124,10 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
         .then(enum_body.delimited_by(just(TokenKind::Indent), just(TokenKind::Dedent)))
         .then_ignore(newline.clone().or_not())
         .map(
-            |((((pub_kw, _), name), generics), variants): ((((Option<TokenKind>, TokenKind), String), Vec<String>), Vec<ast::nodes::EnumVariant>)| Statement::Enum {
+            |((((pub_kw, _), name), generics), variants): (
+                (((Option<TokenKind>, TokenKind), String), Vec<String>),
+                Vec<ast::nodes::EnumVariant>,
+            )| Statement::Enum {
                 name,
                 variants,
                 public: pub_kw.is_some(),

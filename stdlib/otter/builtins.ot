@@ -127,7 +127,7 @@ fn type_of(x: any) -> string:
 fn fields(obj: any) -> string:
     return fields(obj)
 
-fn stringify(x: any) -> string:
+fn str(x: any) -> string:
     if type_of(x) == "string":
         return stringify<string>(x)
     elif type_of(x) == "int":
@@ -143,6 +143,6 @@ fn stringify(x: any) -> string:
     else:
         return "unknown"
 
-# Pythonic alias for stringify
-def str(x: any) -> string:
-    return stringify(x)
+# Deprecated alias for compatibility
+fn stringify(x: any) -> string:
+    return str(x)

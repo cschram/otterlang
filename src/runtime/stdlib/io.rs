@@ -63,6 +63,24 @@ pub unsafe extern "C" fn otter_std_io_println(message: *const c_char) {
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn otter_std_io_eprintln(message: *const c_char) {
+    if message.is_null() {
+        eprintln!();
+        return;
+    }
+
+    let str_ref = match CStr::from_ptr(message).to_str() {
+        Ok(s) => s,
+        Err(_) => {
+            eprintln!("[io.eprintln: invalid UTF-8]");
+            return;
+        }
+    };
+
+    eprintln!("{str_ref}");
+}
+
+#[no_mangle]
 pub extern "C" fn otter_std_io_read_line() -> *mut c_char {
     let mut line = String::new();
     let mut stdin = io::stdin().lock();
@@ -439,6 +457,24 @@ fn register_std_io_symbols(registry: &SymbolRegistry) {
     registry.register(FfiFunction {
         name: "println".into(),
         symbol: "otter_std_io_println".into(),
+        signature: FfiSignature::new(vec![FfiType::Str], FfiType::Unit),
+    });
+
+    registry.register(FfiFunction {
+        name: "std.io.eprintln".into(),
+        symbol: "otter_std_io_eprintln".into(),
+        signature: FfiSignature::new(vec![FfiType::Str], FfiType::Unit),
+    });
+
+    registry.register(FfiFunction {
+        name: "io.eprintln".into(),
+        symbol: "otter_std_io_eprintln".into(),
+        signature: FfiSignature::new(vec![FfiType::Str], FfiType::Unit),
+    });
+
+    registry.register(FfiFunction {
+        name: "eprintln".into(),
+        symbol: "otter_std_io_eprintln".into(),
         signature: FfiSignature::new(vec![FfiType::Str], FfiType::Unit),
     });
 

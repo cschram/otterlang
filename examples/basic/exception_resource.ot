@@ -1,9 +1,9 @@
 def simulate_operation(name: str, should_fail: bool) -> str:
-    print("Starting operation: " + name)
+    print(f"Starting operation: {name}")
     if should_fail:
         raise "Operation failed"
-    let result = "Result of " + name
-    print("Successfully completed: " + result)
+    let result = f"Result of {name}"
+    print(f"Successfully completed: {result}")
     return result
 
 def demonstrate_finally():
@@ -11,16 +11,16 @@ def demonstrate_finally():
     print("===========================")
     try:
         let result = simulate_operation("task1", false)
-        print("Got result: " + result)
+        print(f"Got result: {result}")
     except Error as e:
-        print("Operation failed: " + "error occurred")
+        print("Operation failed: error occurred")
     finally:
         print("Cleaning up after task1")
     try:
         let result = simulate_operation("task2", true)
-        print("Got result: " + result)
+        print(f"Got result: {result}")
     except Error as e:
-        print("Operation failed: " + "error occurred")
+        print("Operation failed: error occurred")
     finally:
         print("Cleaning up after task2")
 
@@ -34,7 +34,7 @@ def resource_management_demo():
         raise "Processing failed"
         print("All operations completed successfully")
     except Error as e:
-        print("Operation failed: " + "error occurred")
+        print("Operation failed: error occurred")
     finally:
         print("Releasing resource: Database")
         print("Releasing resource: Network")

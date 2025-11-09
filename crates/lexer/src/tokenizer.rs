@@ -863,7 +863,7 @@ mod tests {
 
     #[test]
     fn crlf_and_lf_inputs_produce_same_token_stream() {
-        let lf_source = "use otter:fmt\nfn main():\n    fmt.println(\"hi\")\n";
+        let lf_source = "use otter:io\nfn main():\n    io.println(\"hi\")\n";
         let crlf_source = lf_source.replace('\n', "\r\n");
 
         let lf_tokens = token_kinds(lf_source);

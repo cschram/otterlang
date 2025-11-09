@@ -28,6 +28,28 @@ Prints a message to standard output followed by a newline.
 println("Hello, World!")
 ```
 
+### `eprintln(message: string) -> unit`
+
+Prints a message to standard error followed by a newline (useful for diagnostics).
+
+**Example:**
+```otter
+eprintln("Something went wrong")
+```
+
+### `str(value: any) -> string`
+
+Converts any value to its string representation. Prefer this over manual concatenation or the deprecated `stringify()` helper.
+
+**Parameters:**
+- `value`: The value to convert
+
+**Example:**
+```otter
+let answer = str(42)
+println(f"Value: {answer}")
+```
+
 ### `len(collection: array | string) -> int`
 
 Returns the length of an array or string.
@@ -163,6 +185,8 @@ Converts a dictionary or array to a JSON string.
 json_str = json.stringify({"key": "value"})
 ```
 
+> **Note:** `stringify()` is specific to JSON serialization. For general-purpose conversions use the built-in `str()` helper described above (the old Pythonic alias relationship has been flipped: `stringify()` now simply calls `str()`).
+
 ## Module: `runtime`
 
 ### `collect_garbage() -> int`
@@ -254,4 +278,3 @@ Represents a concurrent task that returns type T.
 - `dict<K, V>`: Dictionary mapping K to V
 
 See [Language Specification](./LANGUAGE_SPEC.md) for more details.
-

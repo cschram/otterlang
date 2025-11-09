@@ -1,3 +1,12 @@
+fn print(msg: str):
+    io.print(msg)
+
+fn println(msg: str):
+    io.println(msg)
+
+fn eprintln(msg: str):
+    io.eprintln(msg)
+
 fn read(path: string) -> string:
     return io.read(path)
 

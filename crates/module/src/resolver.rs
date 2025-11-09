@@ -266,8 +266,8 @@ mod tests {
         assert!(matches!(path, ModulePath::Absolute(_)));
 
         // Test unqualified
-        let path = ModulePath::from_string("fmt", &source_dir).unwrap();
-        assert!(matches!(path, ModulePath::Unqualified(name) if name == "fmt"));
+        let path = ModulePath::from_string("io", &source_dir).unwrap();
+        assert!(matches!(path, ModulePath::Unqualified(name) if name == "io"));
     }
 
     #[test]
@@ -276,15 +276,15 @@ mod tests {
         let stdlib_dir = temp.path().join("stdlib");
         fs::create_dir_all(&stdlib_dir).unwrap();
 
-        let fmt_module = stdlib_dir.join("fmt.ot");
-        fs::write(&fmt_module, "fn main: pass").unwrap();
+        let io_module = stdlib_dir.join("io.ot");
+        fs::write(&io_module, "fn main: pass").unwrap();
 
         let resolver = ModuleResolver::new(temp.path().to_path_buf(), Some(stdlib_dir));
-        let resolved = resolver.resolve("fmt").unwrap();
-        assert_eq!(resolved, fmt_module.canonicalize().unwrap());
+        let resolved = resolver.resolve("io").unwrap();
+        assert_eq!(resolved, io_module.canonicalize().unwrap());
 
         // Ensure explicit stdlib still works
-        let resolved_std = resolver.resolve("otter:fmt").unwrap();
+        let resolved_std = resolver.resolve("otter:io").unwrap();
         assert_eq!(resolved, resolved_std);
     }
 

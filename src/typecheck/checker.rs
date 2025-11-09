@@ -78,6 +78,15 @@ impl TypeChecker {
             },
         );
 
+        context.functions.insert(
+            "str".to_string(),
+            TypeInfo::Function {
+                params: vec![TypeInfo::Unknown],
+                param_defaults: vec![false],
+                return_type: Box::new(TypeInfo::Str),
+            },
+        );
+
         // len functions
         context.functions.insert(
             "len".to_string(),

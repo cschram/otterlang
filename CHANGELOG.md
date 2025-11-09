@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `enum` keyword with parser, formatter, and type checker support for user-defined tagged unions
 - `otter.core` standard library module that provides `Option` and `Result` as normal enums
 - `examples/basic/enum_demo.ot` showcasing enum construction and pattern matching
+- Promoted the `str()` helper to a builtin (with `stringify()` retained as a deprecated alias) and updated docs + samples to favor f-strings
+- Moved `print`/`println`/`eprintln` into the `io` module and deprecated the old `fmt` shims
 
 ## [0.1.0] - 2024-12-01
 

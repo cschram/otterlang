@@ -28,6 +28,14 @@ Prints a message to stdout followed by a newline.
 println("Hello, World!")
 ```
 
+##### `eprintln(message: string) -> unit`
+
+Prints a message to stderr followed by a newline.
+
+```otter
+eprintln("Something went wrong")
+```
+
 ##### `read_line() -> string | nil`
 
 Reads a line from stdin. Returns `nil` on EOF.
@@ -108,7 +116,7 @@ Converts a dictionary or array to a JSON string.
 json_str = json.stringify({"key": "value"})
 ```
 
-**Note:** For general value-to-string conversion, use `str()` (Pythonic alias for `stringify()`):
+**Note:** For general value-to-string conversion, use the built-in `str()` function (`stringify()` remains available as a deprecated alias):
 
 ```otter
 num_str = str(42)  # "42"
@@ -175,4 +183,3 @@ value = await task
 Waits for a task to complete and returns its result.
 
 See [Tutorial Series](./TUTORIALS.md) for more examples.
-

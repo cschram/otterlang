@@ -250,7 +250,7 @@ def main():
 
 ### String Conversion
 
-Convert values to strings using `str()` (Pythonic alias for `stringify()`):
+Convert values to strings with the built-in `str()` helper (`stringify()` is kept only for backward compatibility):
 
 ```otter
 def main():
@@ -260,4 +260,3 @@ def main():
 ```
 
 For more information, see the [Language Specification](./LANGUAGE_SPEC.md) and [API Reference](./API_REFERENCE.md).
-

@@ -139,7 +139,7 @@ Clean indentation-based syntax with modern features:
 use math
 
 def greet(name: str) -> str:
-    return "Hello, " + name + "!"
+    return f"Hello, {name}!"
 
 class Point:
     x: float
@@ -154,14 +154,16 @@ def main():
 
     let p = Point(x=3.0, y=4.0)
     let dist = p.distance()
-    print("Point: (" + str(p.x) + ", " + str(p.y) + "), distance: " + str(dist))
+    print(f"Point: ({p.x}, {p.y}), distance: {dist}")
 
     if len(message) > 10:
         print("Long message")
 
     for i in 0..10:
-        print(str(i))
+        print(f"{i}")
 ```
+
+`str()` is now a builtin for general conversions (the old `stringify()` helper remains as a compatibility alias).
 
 ### Enums
 
@@ -185,13 +187,13 @@ def main():
         case Result.Ok(val):
             val
         case Result.Err(msg):
-            print("error: " + msg)
+            print(f"error: {msg}")
             0.0
 
     let wrapped = Option.Some(value)
     match wrapped:
         case Option.Some(v):
-            print("value: " + str(v))
+            print(f"value: {v}")
         case Option.None:
             print("no value")
 ```
@@ -207,7 +209,7 @@ use rust:rand
 
 def main():
     let random = rand.random_f64()
-    print("Random: " + str(random))
+    print(f"Random: {random}")
 ```
 
 **Key advantages:**
