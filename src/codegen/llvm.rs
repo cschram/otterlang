@@ -1950,6 +1950,57 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
         };
 
         match left_value.ty {
+            OtterType::Str => {
+                let lhs = left_value
+                    .value
+                    .clone()
+                    .ok_or_else(|| anyhow!("left operand missing value"))?
+                    .into_pointer_value();
+                let rhs = right_value
+                    .value
+                    .clone()
+                    .ok_or_else(|| anyhow!("right operand missing value"))?
+                    .into_pointer_value();
+
+                match op {
+                    BinaryOp::Add => {
+                        let concat_fn = self.declare_or_get_concat_function();
+                        let call = self
+                            .builder
+                            .build_call(concat_fn, &[lhs.into(), rhs.into()], "str_concat")?;
+                        let value = call
+                            .try_as_basic_value()
+                            .left()
+                            .ok_or_else(|| anyhow!("otter_concat_strings did not return a value"))?;
+                        return Ok(EvaluatedValue::with_value(value, OtterType::Str));
+                    }
+                    BinaryOp::Eq | BinaryOp::Ne => {
+                        let strcmp_fn = self.declare_or_get_strcmp_function();
+                        let call = self
+                            .builder
+                            .build_call(strcmp_fn, &[lhs.into(), rhs.into()], "strcmp")?;
+                        let result = call
+                            .try_as_basic_value()
+                            .left()
+                            .ok_or_else(|| anyhow!("strcmp did not return a value"))?
+                            .into_int_value();
+                        let zero = self.context.i32_type().const_int(0, false);
+                        let predicate = match op {
+                            BinaryOp::Eq => inkwell::IntPredicate::EQ,
+                            BinaryOp::Ne => inkwell::IntPredicate::NE,
+                            _ => unreachable!(),
+                        };
+                        let cmp = self
+                            .builder
+                            .build_int_compare(predicate, result, zero, "str_cmp")?;
+                        return Ok(EvaluatedValue::with_value(cmp.into(), OtterType::Bool));
+                    }
+                    BinaryOp::And | BinaryOp::Or => {
+                        bail!("logical operations require boolean operands, got strings")
+                    }
+                    other => bail!("unsupported binary operation for strings: {:?}", other),
+                }
+            }
             OtterType::I64 => {
                 let lhs = left_value
                     .value
@@ -3667,6 +3718,17 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
         );
         self.module
             .add_function("otter_concat_strings", fn_type, None)
+    }
+
+    fn declare_or_get_strcmp_function(&mut self) -> FunctionValue<'ctx> {
+        if let Some(f) = self.module.get_function("strcmp") {
+            return f;
+        }
+        let fn_type = self.context.i32_type().fn_type(
+            &[self.string_ptr_type.into(), self.string_ptr_type.into()],
+            false,
+        );
+        self.module.add_function("strcmp", fn_type, None)
     }
 
     fn declare_or_get_free_function(&mut self) -> FunctionValue<'ctx> {

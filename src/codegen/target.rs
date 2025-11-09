@@ -184,10 +184,83 @@ impl TargetTriple {
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/time.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <ctype.h>
+#ifndef _WIN32
+#include <sys/time.h>
+#include <sys/types.h>
+#else
+#define WIN32_LEAN_AND_MEAN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <BaseTsd.h>
+typedef SSIZE_T ssize_t;
+
+struct timeval {
+    long tv_sec;
+    long tv_usec;
+};
+
+static int gettimeofday(struct timeval* tv, void* tz) {
+    (void)tz;
+    if (!tv) {
+        return -1;
+    }
+    FILETIME ft;
+    ULONGLONG timestamp;
+    static const ULONGLONG EPOCH_OFFSET = 116444736000000000ULL;
+    GetSystemTimeAsFileTime(&ft);
+    timestamp = ((ULONGLONG)ft.dwHighDateTime << 32) | ft.dwLowDateTime;
+    timestamp -= EPOCH_OFFSET;
+    tv->tv_sec = (long)(timestamp / 10000000ULL);
+    tv->tv_usec = (long)((timestamp % 10000000ULL) / 10ULL);
+    return 0;
+}
+
+static ssize_t otter_getline(char** lineptr, size_t* n, FILE* stream) {
+    if (!lineptr || !n || !stream) {
+        return -1;
+    }
+    if (*lineptr == NULL || *n == 0) {
+        *n = 128;
+        *lineptr = (char*)malloc(*n);
+        if (!*lineptr) {
+            return -1;
+        }
+    }
+
+    size_t position = 0;
+    for (;;) {
+        int c = fgetc(stream);
+        if (c == EOF) {
+            if (position == 0) {
+                return -1;
+            }
+            break;
+        }
+        if (position + 1 >= *n) {
+            size_t new_size = *n * 2;
+            char* new_ptr = (char*)realloc(*lineptr, new_size);
+            if (!new_ptr) {
+                return -1;
+            }
+            *lineptr = new_ptr;
+            *n = new_size;
+        }
+        (*lineptr)[position++] = (char)c;
+        if (c == '\n') {
+            break;
+        }
+    }
+    (*lineptr)[position] = '\0';
+    return (ssize_t)position;
+}
+
+#define getline otter_getline
+#endif
 
 int otter_is_valid_utf8(const unsigned char* str, size_t len) {
     size_t i = 0;
