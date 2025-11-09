@@ -632,6 +632,16 @@ impl TypeChecker {
                                 {
                                     Ok(TypeInfo::Str)
                                 }
+                                (TypeInfo::Str, TypeInfo::I64 | TypeInfo::I32)
+                                    if matches!(op, ast::nodes::BinaryOp::Add) =>
+                                {
+                                    Ok(TypeInfo::Str)
+                                }
+                                (TypeInfo::I64 | TypeInfo::I32, TypeInfo::Str)
+                                    if matches!(op, ast::nodes::BinaryOp::Add) =>
+                                {
+                                    Ok(TypeInfo::Str)
+                                }
                                 _ => {
                                     self.errors.push(TypeError::new(format!(
                                         "cannot apply {} to {} and {}",

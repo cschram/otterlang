@@ -1965,6 +1965,45 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
             right_value = EvaluatedValue::with_value(float_val.into(), OtterType::F64);
         }
 
+        // Coerce int to string for string concatenation
+        if matches!(op, BinaryOp::Add) {
+            if left_value.ty == OtterType::Str && right_value.ty == OtterType::I64 {
+                // Convert int to string using stringify
+                let stringify_fn = self.declare_symbol_function("stringify<int>")?;
+                let int_val = right_value
+                    .value
+                    .clone()
+                    .ok_or_else(|| anyhow!("missing value"))?
+                    .into_int_value();
+                let call = self
+                    .builder
+                    .build_call(stringify_fn, &[int_val.into()], "stringify_int")?;
+                let str_val = call
+                    .try_as_basic_value()
+                    .left()
+                    .ok_or_else(|| anyhow!("stringify<int> did not return a value"))?
+                    .into_pointer_value();
+                right_value = EvaluatedValue::with_value(str_val.into(), OtterType::Str);
+            } else if left_value.ty == OtterType::I64 && right_value.ty == OtterType::Str {
+                // Convert int to string using stringify
+                let stringify_fn = self.declare_symbol_function("stringify<int>")?;
+                let int_val = left_value
+                    .value
+                    .clone()
+                    .ok_or_else(|| anyhow!("missing value"))?
+                    .into_int_value();
+                let call = self
+                    .builder
+                    .build_call(stringify_fn, &[int_val.into()], "stringify_int")?;
+                let str_val = call
+                    .try_as_basic_value()
+                    .left()
+                    .ok_or_else(|| anyhow!("stringify<int> did not return a value"))?
+                    .into_pointer_value();
+                left_value = EvaluatedValue::with_value(str_val.into(), OtterType::Str);
+            }
+        }
+
         if left_value.ty != right_value.ty {
             bail!(
                 "binary operation type mismatch: {:?} vs {:?}",
@@ -2944,6 +2983,7 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
             TypeInfo::List(_) => Some(format!("list.{field}")),
             TypeInfo::Dict { .. } => Some(format!("map.{field}")),
             TypeInfo::Error => Some(format!("error.{field}")),
+            TypeInfo::Str => Some(format!("str.{field}")),
             TypeInfo::Generic { base, .. } => match base.as_str() {
                 "List" => Some(format!("list.{field}")),
                 "Dict" | "Map" => Some(format!("map.{field}")),

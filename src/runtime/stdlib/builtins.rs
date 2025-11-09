@@ -198,6 +198,24 @@ pub unsafe extern "C" fn otter_builtin_cap_string(s: *const c_char) -> i64 {
 }
 
 // ============================================================================
+// str.contains(substring) - Check if string contains substring
+// ============================================================================
+
+#[no_mangle]
+pub unsafe extern "C" fn otter_builtin_str_contains(s: *const c_char, substring: *const c_char) -> bool {
+    if s.is_null() || substring.is_null() {
+        return false;
+    }
+    unsafe {
+        if let (Ok(str_ref), Ok(substr_ref)) = (CStr::from_ptr(s).to_str(), CStr::from_ptr(substring).to_str()) {
+            str_ref.contains(substr_ref)
+        } else {
+            false
+        }
+    }
+}
+
+// ============================================================================
 // append(x, val) - Append to a list
 // ============================================================================
 
@@ -1140,6 +1158,13 @@ fn register_builtin_symbols(registry: &SymbolRegistry) {
         name: "cap<list>".into(),
         symbol: "otter_builtin_cap_list".into(),
         signature: FfiSignature::new(vec![FfiType::List], FfiType::I64),
+    });
+
+    // str.contains() method
+    registry.register(FfiFunction {
+        name: "str.contains".into(),
+        symbol: "otter_builtin_str_contains".into(),
+        signature: FfiSignature::new(vec![FfiType::Str, FfiType::Str], FfiType::Bool),
     });
 
     // append() functions
