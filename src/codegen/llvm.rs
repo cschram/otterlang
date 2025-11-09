@@ -296,8 +296,8 @@ pub fn build_executable(
 
     // Compile the runtime C file (target-specific)
     let runtime_o = output.with_extension("runtime.o");
-    let compiler = runtime_triple.c_compiler();
-    let mut cc = Command::new(&compiler);
+    let c_compiler = runtime_triple.c_compiler();
+    let mut cc = Command::new(&c_compiler);
 
     // Add target-specific compiler flags
     if runtime_triple.is_wasm() {
@@ -487,8 +487,8 @@ pub fn build_shared_library(
 
     // Compile runtime C file (target-specific)
     let runtime_o = output.with_extension("runtime.o");
-    let compiler = runtime_triple.c_compiler();
-    let mut cc = Command::new(&compiler);
+    let c_compiler = runtime_triple.c_compiler();
+    let mut cc = Command::new(&c_compiler);
 
     // Add target-specific compiler flags
     if runtime_triple.is_wasm() {
