@@ -299,6 +299,11 @@ fn compile_pipeline(
         module_processor.process_imports(&program)
     })?;
 
+    // Resolve re-exports after all modules are loaded
+    profiler.record_phase("Re-export Resolution", || {
+        module_processor.resolve_all_re_exports()
+    })?;
+
     // Type check the program
     let mut type_checker =
         TypeChecker::with_language_features(settings.language_features().clone())

@@ -259,4 +259,65 @@ def main():
     print(f"Number as string: {num_str}")
 ```
 
+### Modules and Re-exports
+
+Create modules to organize your code:
+
+```otter
+# math_utils.ot
+pub def add(a: float, b: float) -> float:
+    return a + b
+
+pub def multiply(a: float, b: float) -> float:
+    return a * b
+
+# main.ot
+use math_utils
+
+def main():
+    result = math_utils.add(5, 3)
+    print(result)
+```
+
+**Re-exports** allow you to create facade modules that aggregate functionality:
+
+```otter
+# math.ot
+pub def sqrt(x: float) -> float:
+    # ... implementation
+    pass
+
+pub def sin(x: float) -> float:
+    # ... implementation
+    pass
+
+# my_math.ot - Facade module
+pub use math.sqrt
+pub use math.sin as sine
+
+# Now users can import from my_math instead of math
+# main.ot
+use my_math
+
+def main():
+    result = my_math.sqrt(16)  # Re-exported from math
+    sine_val = my_math.sine(0.5)  # Re-exported with rename
+```
+
+You can also re-export all items from a module:
+
+```otter
+# api.ot - Facade that re-exports everything
+pub use math
+pub use io
+pub use time
+
+# Users can import everything from api
+use api
+
+def main():
+    api.sqrt(16)
+    api.print("Hello")
+```
+
 For more information, see the [Language Specification](./LANGUAGE_SPEC.md) and [API Reference](./API_REFERENCE.md).

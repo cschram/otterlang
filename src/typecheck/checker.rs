@@ -183,9 +183,8 @@ impl TypeChecker {
                 Statement::Struct { .. }
                 | Statement::Enum { .. }
                 | Statement::TypeAlias { .. }
-                | Statement::Use { .. } => {
-                    // These are handled in earlier passes
-                }
+                | Statement::Use { .. }
+                | Statement::PubUse { .. } => {}
                 _ => {
                     self.errors.push(TypeError::new(format!(
                         "unexpected statement at top level: {:?}",
@@ -1022,6 +1021,7 @@ impl TypeChecker {
             Statement::Use { .. } => {
                 // Module imports are handled separately
             }
+            Statement::PubUse { .. } => {}
             Statement::Struct { .. } => {
                 // Struct definitions are handled at the module level
             }

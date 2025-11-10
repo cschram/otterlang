@@ -145,6 +145,73 @@ impl ModuleLoader {
         exports
     }
 
+    /// Resolve re-exports for a module after all modules are loaded
+    /// This processes `pub use` statements and adds re-exported items to the module's exports
+    pub fn resolve_re_exports(
+        &self,
+        module: &mut Module,
+        all_modules: &HashMap<PathBuf, Module>,
+    ) -> Result<()> {
+        use ast::nodes::Statement;
+
+        for statement in &module.program.statements {
+            if let Statement::PubUse {
+                module: source_module,
+                item,
+                alias,
+            } = statement
+            {
+                // Resolve the source module path
+                let source_path = self.resolver.resolve(source_module)?;
+
+                // Get the source module
+                let source_module_data = all_modules
+                    .get(&source_path)
+                    .ok_or_else(|| {
+                        anyhow::anyhow!(
+                            "re-export source module not found: {} (resolved to {})",
+                            source_module,
+                            source_path.display()
+                        )
+                    })?;
+
+                if let Some(item_name) = item {
+                    // Re-export specific item
+                    let export_name = alias.as_ref().unwrap_or(item_name);
+
+                    // Check if the item exists in the source module
+                    if source_module_data.exports.functions.contains(item_name) {
+                        module.exports.add_function(export_name.clone());
+                    } else if source_module_data.exports.constants.contains(item_name) {
+                        module.exports.add_constant(export_name.clone());
+                    } else if source_module_data.exports.types.contains(item_name) {
+                        module.exports.add_type(export_name.clone());
+                    } else {
+                        // Item not found in source module exports
+                        return Err(anyhow::anyhow!(
+                            "cannot re-export '{}' from '{}': item not found or not public",
+                            item_name,
+                            source_module
+                        ));
+                    }
+                } else {
+                    // Re-export all public items from the module
+                    for func in &source_module_data.exports.functions {
+                        module.exports.add_function(func.clone());
+                    }
+                    for constant in &source_module_data.exports.constants {
+                        module.exports.add_constant(constant.clone());
+                    }
+                    for ty in &source_module_data.exports.types {
+                        module.exports.add_type(ty.clone());
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     /// Get the module resolver
     pub fn resolver(&self) -> &ModuleResolver {
         &self.resolver

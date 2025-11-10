@@ -1397,6 +1397,10 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                 // Module validation occurs when functions from the module are actually called
                 Ok(())
             }
+            Statement::PubUse { .. } => {
+                // Re-exports are resolved during module loading
+                Ok(())
+            }
             Statement::Block(block) => {
                 for stmt in &block.statements {
                     self.lower_statement(stmt, _function, ctx)?;

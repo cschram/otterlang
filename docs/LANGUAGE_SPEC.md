@@ -471,6 +471,43 @@ def private_function():
     return "not accessible"
 ```
 
+### Re-exports
+
+Re-exports allow modules to re-export items from other modules, enabling facade patterns and cleaner public APIs.
+
+```otter
+# Re-export specific items
+pub use math.sqrt
+pub use math.sin as sine
+
+# Re-export all public items from a module
+pub use math
+```
+
+**Re-exporting specific items:**
+```otter
+# math.ot
+pub def sqrt(x: float) -> float:
+    # ... implementation
+
+# mymodule.ot
+pub use math.sqrt  # Re-export sqrt from math module
+```
+
+**Re-exporting with rename:**
+```otter
+# mymodule.ot
+pub use math.sin as sine  # Re-export sin as sine
+```
+
+**Re-exporting all items:**
+```otter
+# mymodule.ot
+pub use math  # Re-export all public items from math
+```
+
+Re-exports must reference items that are actually public in the source module. Re-export chains are supported.
+
 ### Standard Library Modules
 
 - `core` - Core types and functions (Option, Result)

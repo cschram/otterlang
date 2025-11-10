@@ -201,6 +201,20 @@ impl Formatter {
                     .collect();
                 format!("{}use {}\n", self.indent(indent), modules.join(", "))
             }
+            Statement::PubUse {
+                module,
+                item,
+                alias,
+            } => {
+                let mut re_export = format!("pub use {}", module);
+                if let Some(item_name) = item {
+                    re_export.push_str(&format!(".{}", item_name));
+                }
+                if let Some(alias_name) = alias {
+                    re_export.push_str(&format!(" as {}", alias_name));
+                }
+                format!("{}{}\n", self.indent(indent), re_export)
+            }
             Statement::Block(block) => self.format_block(block, indent),
             Statement::Try {
                 body,

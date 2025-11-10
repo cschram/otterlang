@@ -784,6 +784,31 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
         )
         .map(|imports| Statement::Use { imports });
 
+    // pub use statement for re-exports
+    // Syntax: pub use module.item [as alias]
+    //         pub use module (re-export all)
+    let pub_use_stmt = just(TokenKind::Pub)
+        .ignore_then(just(TokenKind::Use))
+        .ignore_then(
+            module_path
+                .clone()
+                .then(
+                    just(TokenKind::Dot)
+                        .ignore_then(identifier_parser())
+                        .or_not(),
+                )
+                .then(
+                    just(TokenKind::As)
+                        .ignore_then(identifier_parser())
+                        .or_not(),
+                )
+                .map(|((module, item), alias)| Statement::PubUse {
+                    module,
+                    item,
+                    alias,
+                }),
+        );
+
     let break_stmt = just(TokenKind::Break).map(|_| Statement::Break);
     let continue_stmt = just(TokenKind::Continue).map(|_| Statement::Continue);
     let pass_stmt = just(TokenKind::Pass).map(|_| Statement::Pass);
@@ -947,6 +972,7 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
             let_stmt,
             assignment_stmt,
             use_stmt,
+            pub_use_stmt,
             if_stmt,
             for_stmt,
             while_stmt,

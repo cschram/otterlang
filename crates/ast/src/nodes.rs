@@ -198,6 +198,13 @@ pub enum Statement {
         imports: Vec<UseImport>,
     },
 
+    // Re-exports
+    PubUse {
+        module: String,
+        item: Option<String>, // None means re-export all public items
+        alias: Option<String>, // Optional rename
+    },
+
     // Blocks (for grouping)
     Block(Block),
 
@@ -223,6 +230,7 @@ impl Statement {
             | Statement::Return(_)
             | Statement::Expr(_)
             | Statement::Use { .. }
+            | Statement::PubUse { .. }
             | Statement::Struct { .. }
             | Statement::Enum { .. }
             | Statement::TypeAlias { .. }

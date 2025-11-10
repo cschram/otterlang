@@ -170,6 +170,21 @@ impl ModuleProcessor {
             .set_stdlib_dir(normalized.clone());
         self.stdlib_dir = Some(normalized);
     }
+
+    /// Resolve all re-exports after all modules are loaded
+    pub fn resolve_all_re_exports(&mut self) -> Result<()> {
+        let module_paths: Vec<PathBuf> = self.loaded_modules.keys().cloned().collect();
+
+        for module_path in module_paths {
+            let all_modules_snapshot: HashMap<PathBuf, Module> = self.loaded_modules.clone();
+            if let Some(module) = self.loaded_modules.get_mut(&module_path) {
+                self.loader
+                    .resolve_re_exports(module, &all_modules_snapshot)?;
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl ModuleProcessor {
@@ -274,5 +289,148 @@ mod tests {
 
         assert_eq!(deps.len(), 1);
         assert!(deps.contains(&math_file.canonicalize().unwrap()));
+    }
+
+    #[test]
+    fn test_re_export_specific_item() {
+        let temp_dir = TempDir::new().unwrap();
+        let source_dir = temp_dir.path().join("src");
+        fs::create_dir_all(&source_dir).unwrap();
+
+        let math_file = source_dir.join("math.ot");
+        let facade_file = source_dir.join("facade.ot");
+
+        fs::write(
+            &math_file,
+            "pub def sqrt(x: float) -> float:\n    return x * x\n",
+        )
+        .unwrap();
+        fs::write(
+            &facade_file,
+            "pub use ./math.sqrt\n",
+        )
+        .unwrap();
+
+        let mut loader = ModuleLoader::new(source_dir.clone(), None);
+        let math_module = loader.load_file(&math_file).unwrap();
+        let mut facade_module = loader.load_file(&facade_file).unwrap();
+
+        let mut all_modules = HashMap::new();
+        all_modules.insert(math_file.canonicalize().unwrap(), math_module);
+        all_modules.insert(facade_file.canonicalize().unwrap(), facade_module.clone());
+
+        loader
+            .resolve_re_exports(&mut facade_module, &all_modules)
+            .unwrap();
+
+        assert!(facade_module.exports.functions.contains(&"sqrt".to_string()));
+    }
+
+    #[test]
+    fn test_re_export_with_rename() {
+        let temp_dir = TempDir::new().unwrap();
+        let source_dir = temp_dir.path().join("src");
+        fs::create_dir_all(&source_dir).unwrap();
+
+        let math_file = source_dir.join("math.ot");
+        let facade_file = source_dir.join("facade.ot");
+
+        fs::write(
+            &math_file,
+            "pub def sin(x: float) -> float:\n    return x\n",
+        )
+        .unwrap();
+        fs::write(
+            &facade_file,
+            "pub use ./math.sin as sine\n",
+        )
+        .unwrap();
+
+        let mut loader = ModuleLoader::new(source_dir.clone(), None);
+        let math_module = loader.load_file(&math_file).unwrap();
+        let mut facade_module = loader.load_file(&facade_file).unwrap();
+
+        let mut all_modules = HashMap::new();
+        all_modules.insert(math_file.canonicalize().unwrap(), math_module);
+        all_modules.insert(facade_file.canonicalize().unwrap(), facade_module.clone());
+
+        loader
+            .resolve_re_exports(&mut facade_module, &all_modules)
+            .unwrap();
+
+        assert!(facade_module.exports.functions.contains(&"sine".to_string()));
+        assert!(!facade_module.exports.functions.contains(&"sin".to_string()));
+    }
+
+    #[test]
+    fn test_re_export_all() {
+        let temp_dir = TempDir::new().unwrap();
+        let source_dir = temp_dir.path().join("src");
+        fs::create_dir_all(&source_dir).unwrap();
+
+        let math_file = source_dir.join("math.ot");
+        let facade_file = source_dir.join("facade.ot");
+
+        fs::write(
+            &math_file,
+            "pub def sqrt(x: float) -> float:\n    return x * x\npub def sin(x: float) -> float:\n    return x\n",
+        )
+        .unwrap();
+        fs::write(
+            &facade_file,
+            "pub use ./math\n",
+        )
+        .unwrap();
+
+        let mut loader = ModuleLoader::new(source_dir.clone(), None);
+        let math_module = loader.load_file(&math_file).unwrap();
+        let mut facade_module = loader.load_file(&facade_file).unwrap();
+
+        let mut all_modules = HashMap::new();
+        all_modules.insert(math_file.canonicalize().unwrap(), math_module);
+        all_modules.insert(facade_file.canonicalize().unwrap(), facade_module.clone());
+
+        loader
+            .resolve_re_exports(&mut facade_module, &all_modules)
+            .unwrap();
+
+        assert!(facade_module.exports.functions.contains(&"sqrt".to_string()));
+        assert!(facade_module.exports.functions.contains(&"sin".to_string()));
+    }
+
+    #[test]
+    fn test_re_export_error_nonexistent_item() {
+        let temp_dir = TempDir::new().unwrap();
+        let source_dir = temp_dir.path().join("src");
+        fs::create_dir_all(&source_dir).unwrap();
+
+        let math_file = source_dir.join("math.ot");
+        let facade_file = source_dir.join("facade.ot");
+
+        fs::write(
+            &math_file,
+            "pub def sqrt(x: float) -> float:\n    return x * x\n",
+        )
+        .unwrap();
+        fs::write(
+            &facade_file,
+            "pub use ./math.nonexistent\n",
+        )
+        .unwrap();
+
+        let mut loader = ModuleLoader::new(source_dir.clone(), None);
+        let math_module = loader.load_file(&math_file).unwrap();
+        let mut facade_module = loader.load_file(&facade_file).unwrap();
+
+        let mut all_modules = HashMap::new();
+        all_modules.insert(math_file.canonicalize().unwrap(), math_module);
+        all_modules.insert(facade_file.canonicalize().unwrap(), facade_module.clone());
+
+        let result = loader.resolve_re_exports(&mut facade_module, &all_modules);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("cannot re-export"));
     }
 }
