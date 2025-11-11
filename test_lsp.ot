@@ -1,8 +1,0 @@
-let x = 10
-let y = 20
-
-def add(a, b):
-    let result = a + b
-    return result
-
-let sum = add(x, y)
