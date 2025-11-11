@@ -1,14 +1,16 @@
 use anyhow::{Context, Result};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use crossterm::execute;
-use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
+use crossterm::terminal::{
+    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+};
 use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
 use std::io::{self, Stdout};
 use std::time::Duration;
 
 use crate::repl::engine::ReplEngine;
-use crate::repl::events::{AppEvent, EventHandler, is_ctrl, matches_key};
+use crate::repl::events::{is_ctrl, matches_key, AppEvent, EventHandler};
 use crate::repl::state::{AppState, Mode, OutputKind};
 use crate::repl::ui::draw_ui;
 
@@ -22,7 +24,7 @@ pub struct Tui {
 impl Tui {
     pub fn new(engine: ReplEngine) -> Result<Self> {
         enable_raw_mode().context("Failed to enable raw mode")?;
-        
+
         let mut stdout = io::stdout();
         execute!(stdout, EnterAlternateScreen).context("Failed to enter alternate screen")?;
 
@@ -54,17 +56,15 @@ impl Tui {
             }
 
             match self.event_handler.next() {
-                Ok(event) => {
-                    match self.handle_event(event) {
-                        Ok(true) => break,
-                        Ok(false) => continue,
-                        Err(e) => {
-                            let _ = disable_raw_mode();
-                            let _ = execute!(io::stdout(), LeaveAlternateScreen);
-                            return Err(e).context("Event handling error");
-                        }
+                Ok(event) => match self.handle_event(event) {
+                    Ok(true) => break,
+                    Ok(false) => continue,
+                    Err(e) => {
+                        let _ = disable_raw_mode();
+                        let _ = execute!(io::stdout(), LeaveAlternateScreen);
+                        return Err(e).context("Event handling error");
                     }
-                }
+                },
                 Err(e) => {
                     let _ = disable_raw_mode();
                     let _ = execute!(io::stdout(), LeaveAlternateScreen);
@@ -160,10 +160,8 @@ impl Tui {
                 } else if self.state.cursor.0 > 0 {
                     let lines: Vec<&str> = self.state.input.lines().collect();
                     self.state.cursor.0 -= 1;
-                    self.state.cursor.1 = lines
-                        .get(self.state.cursor.0)
-                        .map(|l| l.len())
-                        .unwrap_or(0);
+                    self.state.cursor.1 =
+                        lines.get(self.state.cursor.0).map(|l| l.len()).unwrap_or(0);
                 }
             }
             KeyCode::Right => {
@@ -201,7 +199,8 @@ impl Tui {
                         let current_line = current_line.clone();
                         let mut new_lines = lines.clone();
                         new_lines.remove(self.state.cursor.0);
-                        new_lines[self.state.cursor.0 - 1] = format!("{}{}", prev_line, current_line);
+                        new_lines[self.state.cursor.0 - 1] =
+                            format!("{}{}", prev_line, current_line);
                         self.state.input = new_lines.join("\n");
                         self.state.cursor.0 -= 1;
                         self.state.cursor.1 = prev_line.len();
@@ -266,7 +265,9 @@ impl Tui {
             }
             KeyCode::Enter => {
                 if let Some(selected) = self.state.history.get(
-                    self.state.history_scroll.min(self.state.history.len().saturating_sub(1)),
+                    self.state
+                        .history_scroll
+                        .min(self.state.history.len().saturating_sub(1)),
                 ) {
                     self.state.input = selected.clone();
                     self.state.mode = Mode::Input;
@@ -285,24 +286,25 @@ impl Tui {
                 .chars()
                 .take_while(|c| c.is_whitespace())
                 .collect();
-            
+
             let trimmed = current_line.trim();
             let should_increase_indent = trimmed.ends_with(':');
-            
+
             let new_indent = if should_increase_indent {
                 format!("{}    ", current_indent)
             } else {
                 current_indent.clone()
             };
-            
+
             let cursor_pos = self.state.cursor.1.min(current_line.len());
             let before_cursor = &current_line[..cursor_pos];
             let after_cursor = &current_line[cursor_pos..];
-            
+
             let mut new_lines = lines.clone();
-            new_lines[self.state.cursor.0] = format!("{}\n{}{}", before_cursor, new_indent, after_cursor);
+            new_lines[self.state.cursor.0] =
+                format!("{}\n{}{}", before_cursor, new_indent, after_cursor);
             self.state.input = new_lines.join("\n");
-            
+
             self.state.cursor.0 += 1;
             self.state.cursor.1 = new_indent.len();
             self.state.continuation_mode = true;
@@ -336,11 +338,11 @@ impl Tui {
             return false;
         }
 
-        trimmed.ends_with(':') ||
-        trimmed.ends_with('\\') ||
-        (trimmed.matches('(').count() > trimmed.matches(')').count()) ||
-        (trimmed.matches('[').count() > trimmed.matches(']').count()) ||
-        (trimmed.matches('{').count() > trimmed.matches('}').count())
+        trimmed.ends_with(':')
+            || trimmed.ends_with('\\')
+            || (trimmed.matches('(').count() > trimmed.matches(')').count())
+            || (trimmed.matches('[').count() > trimmed.matches(']').count())
+            || (trimmed.matches('{').count() > trimmed.matches('}').count())
     }
 
     fn execute_input(&mut self) {
@@ -349,32 +351,32 @@ impl Tui {
             return;
         }
 
-        self.state.add_output(format!("otter> {}", input), OutputKind::Input);
+        self.state
+            .add_output(format!("otter> {}", input), OutputKind::Input);
         self.state.add_to_history(input.clone());
         match self.engine.evaluate(&input) {
-            Ok(result) => {
-                match result.kind {
-                    crate::repl::engine::EvaluationKind::Info => {
-                        if let Some(output) = result.output {
-                            self.state.add_output(output, OutputKind::Info);
-                        }
-                    }
-                    crate::repl::engine::EvaluationKind::Success => {
-                        if let Some(output) = result.output {
-                            self.state.add_output(output, OutputKind::Output);
-                        }
-                    }
-                    crate::repl::engine::EvaluationKind::Error => {
-                        if let Some(output) = result.output {
-                            self.state.error_count += 1;
-                            self.state.add_output(output, OutputKind::Error);
-                        }
+            Ok(result) => match result.kind {
+                crate::repl::engine::EvaluationKind::Info => {
+                    if let Some(output) = result.output {
+                        self.state.add_output(output, OutputKind::Info);
                     }
                 }
-            }
+                crate::repl::engine::EvaluationKind::Success => {
+                    if let Some(output) = result.output {
+                        self.state.add_output(output, OutputKind::Output);
+                    }
+                }
+                crate::repl::engine::EvaluationKind::Error => {
+                    if let Some(output) = result.output {
+                        self.state.error_count += 1;
+                        self.state.add_output(output, OutputKind::Error);
+                    }
+                }
+            },
             Err(e) => {
                 self.state.error_count += 1;
-                self.state.add_output(format!("error: {}", e), OutputKind::Error);
+                self.state
+                    .add_output(format!("error: {}", e), OutputKind::Error);
             }
         }
 
@@ -415,13 +417,13 @@ impl Tui {
 
         if let Some(proj_dirs) = ProjectDirs::from("com", "otterlang", "otterlang") {
             let history_dir = proj_dirs.config_dir();
-            
+
             if let Err(_) = fs::create_dir_all(history_dir) {
                 return;
             }
 
             let history_file = history_dir.join("repl_history");
-            
+
             if let Ok(mut file) = fs::File::create(&history_file) {
                 let start = self.state.history.len().saturating_sub(1000);
                 for line in &self.state.history[start..] {
@@ -441,4 +443,3 @@ impl Drop for Tui {
         let _ = execute!(io::stdout(), LeaveAlternateScreen);
     }
 }
-

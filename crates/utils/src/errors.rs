@@ -123,12 +123,12 @@ pub fn emit_diagnostics(diagnostics: &[Diagnostic], source: &str) {
 
         // Add suggestion if available
         if let Some(suggestion) = diagnostic.suggestion() {
-            report = report.with_note(format!("💡 Suggestion: {}", suggestion));
+            report = report.with_note(format!("Suggestion: {}", suggestion));
         }
 
         // Add help text if available
         if let Some(help) = diagnostic.help() {
-            report = report.with_note(format!("ℹ️  {}", help));
+            report = report.with_note(help);
         } else {
             report = report
                 .with_note("For more information, re-run with --debug to inspect tokens and AST.");

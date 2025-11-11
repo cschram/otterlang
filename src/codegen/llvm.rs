@@ -268,7 +268,8 @@ pub fn build_executable(
 
     // Check if we're compiling for the native target
     let native_triple = inkwell::targets::TargetMachine::get_default_triple();
-    let is_native_target = llvm_triple_to_string(&llvm_triple) == llvm_triple_to_string(&native_triple);
+    let is_native_target =
+        llvm_triple_to_string(&llvm_triple) == llvm_triple_to_string(&native_triple);
     compiler.module.set_triple(&llvm_triple);
 
     let target = Target::from_triple(&llvm_triple)
@@ -1508,7 +1509,7 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                 }
                 Ok(())
             }
-            Statement::Assignment { name, expr } => {
+            Statement::Assignment { name, expr, .. } => {
                 let evaluated = self.eval_expr(expr, ctx)?;
                 if evaluated.ty == OtterType::Unit {
                     bail!("cannot assign unit value to `{name}`");
@@ -1613,7 +1614,8 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                 let pop_context_fn = self.declare_symbol_function("runtime.error_pop_context")?;
 
                 // Push error context
-                self.builder.build_call(push_context_fn, &[], "push_error_context")?;
+                self.builder
+                    .build_call(push_context_fn, &[], "push_error_context")?;
 
                 // Jump to try body
                 self.builder.build_unconditional_branch(try_bb)?;
@@ -1643,7 +1645,10 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                 // Create handler blocks for each except clause
                 let mut handler_bbs = Vec::new();
                 for (i, _) in handlers.iter().enumerate() {
-                    handler_bbs.push(self.context.append_basic_block(_function, &format!("handler_{}", i)));
+                    handler_bbs.push(
+                        self.context
+                            .append_basic_block(_function, &format!("handler_{}", i)),
+                    );
                 }
 
                 // If error occurred, check handlers; otherwise go to else or end
@@ -1654,7 +1659,11 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                 };
                 let no_error_target_bb = else_bb.unwrap_or(end_bb);
 
-                self.builder.build_conditional_branch(has_error, error_target_bb, no_error_target_bb)?;
+                self.builder.build_conditional_branch(
+                    has_error,
+                    error_target_bb,
+                    no_error_target_bb,
+                )?;
 
                 // Generate handler blocks
                 for (i, handler) in handlers.iter().enumerate() {
@@ -1671,7 +1680,9 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                     if let Some(alias) = &handler.alias {
                         // Get error message and bind to variable
                         let get_message_fn = self.declare_symbol_function("runtime.get_message")?;
-                        let message_call = self.builder.build_call(get_message_fn, &[], "get_error_message")?;
+                        let message_call =
+                            self.builder
+                                .build_call(get_message_fn, &[], "get_error_message")?;
                         let message_ptr = message_call
                             .try_as_basic_value()
                             .left()
@@ -1679,7 +1690,8 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                             .into_pointer_value();
 
                         // Allocate variable for the error message
-                        let message_alloca = self.builder.build_alloca(self.string_ptr_type, alias)?;
+                        let message_alloca =
+                            self.builder.build_alloca(self.string_ptr_type, alias)?;
                         self.builder.build_store(message_alloca, message_ptr)?;
 
                         ctx.insert(
@@ -1735,7 +1747,8 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                     }
                     if let Some(current_block) = self.builder.get_insert_block() {
                         if current_block.get_terminator().is_none() {
-                            self.builder.build_call(pop_context_fn, &[], "pop_error_context")?;
+                            self.builder
+                                .build_call(pop_context_fn, &[], "pop_error_context")?;
                             if let Some(cb) = self.builder.get_insert_block() {
                                 if cb.get_terminator().is_none() {
                                     self.builder.build_unconditional_branch(end_bb)?;
@@ -1744,7 +1757,8 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                         }
                     }
                 } else {
-                    self.builder.build_call(pop_context_fn, &[], "pop_error_context")?;
+                    self.builder
+                        .build_call(pop_context_fn, &[], "pop_error_context")?;
                     self.builder.build_unconditional_branch(end_bb)?;
                 }
 
@@ -1801,7 +1815,8 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                                     .into_int_value();
 
                                 // Use stringify function to convert int to string
-                                let stringify_fn = self.declare_symbol_function("stringify<int>")?;
+                                let stringify_fn =
+                                    self.declare_symbol_function("stringify<int>")?;
                                 let string_call = self.builder.build_call(
                                     stringify_fn,
                                     &[int_val.into()],
@@ -1810,7 +1825,9 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                                 let string_ptr = string_call
                                     .try_as_basic_value()
                                     .left()
-                                    .ok_or_else(|| anyhow!("stringify<int> did not return a value"))?
+                                    .ok_or_else(|| {
+                                        anyhow!("stringify<int> did not return a value")
+                                    })?
                                     .into_pointer_value();
 
                                 // Get string length
@@ -1869,10 +1886,16 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                     }
                 }
 
-                self.builder.build_unreachable().expect("unreachable after raise");
-                let unreachable_bb = self.context.append_basic_block(_function, "unreachable_after_raise");
+                self.builder
+                    .build_unreachable()
+                    .expect("unreachable after raise");
+                let unreachable_bb = self
+                    .context
+                    .append_basic_block(_function, "unreachable_after_raise");
                 self.builder.position_at_end(unreachable_bb);
-                self.builder.build_unreachable().expect("unreachable block terminator");
+                self.builder
+                    .build_unreachable()
+                    .expect("unreachable block terminator");
 
                 Ok(())
             }
@@ -1886,7 +1909,7 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
     ) -> Result<EvaluatedValue<'ctx>> {
         match expr {
             Expr::Literal(literal) => self.eval_literal(literal),
-            Expr::Identifier(name) => self.eval_identifier(name, ctx),
+            Expr::Identifier { name, .. } => self.eval_identifier(name, ctx),
             Expr::Binary { left, op, right } => self.eval_binary_expr(left, op, right, ctx),
             Expr::Call { func, args } => self.eval_call(func, args, ctx),
             Expr::Unary { op, expr } => self.eval_unary_expr(op, expr, ctx),
@@ -1975,26 +1998,37 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
 
                 let mut arm_bbs = Vec::new();
                 for i in 0..arms.len() {
-                    arm_bbs.push(self.context.append_basic_block(current_function, &format!("match_arm_{}", i)));
+                    arm_bbs.push(
+                        self.context
+                            .append_basic_block(current_function, &format!("match_arm_{}", i)),
+                    );
                 }
-                let match_end_bb = self.context.append_basic_block(current_function, "match_end");
-                let no_match_bb = self.context.append_basic_block(current_function, "match_no_match");
+                let match_end_bb = self
+                    .context
+                    .append_basic_block(current_function, "match_end");
+                let no_match_bb = self
+                    .context
+                    .append_basic_block(current_function, "match_no_match");
 
                 let first_arm_result_ty = if let Some(first_arm) = arms.first() {
-                    let temp_bb = self.context.append_basic_block(current_function, "match_type_infer");
+                    let temp_bb = self
+                        .context
+                        .append_basic_block(current_function, "match_type_infer");
                     let saved_bb = self.builder.get_insert_block();
                     self.builder.position_at_end(temp_bb);
-                    
+
                     let mut test_ctx = ctx.clone();
                     self.bind_pattern_variables(&first_arm.pattern, &match_value, &mut test_ctx)?;
                     let test_result = self.eval_expr(&first_arm.body, &mut test_ctx)?;
-                    
-                    self.builder.build_unreachable().expect("unreachable in temp block");
-                    
+
+                    self.builder
+                        .build_unreachable()
+                        .expect("unreachable in temp block");
+
                     if let Some(saved) = saved_bb {
                         self.builder.position_at_end(saved);
                     }
-                    
+
                     test_result.ty
                 } else {
                     bail!("match expression must have at least one arm");
@@ -2002,16 +2036,18 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
 
                 // Create result allocation before match loop
                 let result_alloca = if first_arm_result_ty != OtterType::Unit {
-                    Some(self.builder.build_alloca(
-                        self.basic_type(first_arm_result_ty)?,
-                        "match_result",
-                    )?)
+                    Some(
+                        self.builder
+                            .build_alloca(self.basic_type(first_arm_result_ty)?, "match_result")?,
+                    )
                 } else {
                     None
                 };
 
                 // Generate pattern matching logic
-                let mut next_check_bb = self.context.append_basic_block(current_function, "match_start");
+                let mut next_check_bb = self
+                    .context
+                    .append_basic_block(current_function, "match_start");
                 self.builder.build_unconditional_branch(next_check_bb)?;
 
                 for (arm_idx, arm) in arms.iter().enumerate() {
@@ -2022,7 +2058,10 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
 
                     // Create next check block for next arm (or no_match if this is the last)
                     next_check_bb = if arm_idx < arms.len() - 1 {
-                        self.context.append_basic_block(current_function, &format!("match_check_{}", arm_idx + 1))
+                        self.context.append_basic_block(
+                            current_function,
+                            &format!("match_check_{}", arm_idx + 1),
+                        )
                     } else {
                         no_match_bb
                     };
@@ -2057,14 +2096,18 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
 
                 // Handle no match case
                 self.builder.position_at_end(no_match_bb);
-                self.builder.build_unreachable().expect("unreachable after no match");
+                self.builder
+                    .build_unreachable()
+                    .expect("unreachable after no match");
 
                 // Position at end block and load result
                 self.builder.position_at_end(match_end_bb);
 
                 if let Some(alloca) = result_alloca {
                     let result_type = self.basic_type(first_arm_result_ty)?;
-                    let loaded = self.builder.build_load(result_type, alloca, "load_match_result")?;
+                    let loaded =
+                        self.builder
+                            .build_load(result_type, alloca, "load_match_result")?;
                     Ok(EvaluatedValue::with_value(loaded, first_arm_result_ty))
                 } else {
                     // Unit type
@@ -2131,7 +2174,9 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                 // For now, we create a map-like structure to store field values
 
                 let map_new = self.declare_symbol_function("map.new")?;
-                let map_call = self.builder.build_call(map_new, &[], &format!("{}_struct_new", name))?;
+                let map_call =
+                    self.builder
+                        .build_call(map_new, &[], &format!("{}_struct_new", name))?;
                 let struct_handle = map_call
                     .try_as_basic_value()
                     .left()
@@ -2143,12 +2188,17 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                     let field_value = self.eval_expr(field_expr, ctx)?;
 
                     // Convert field name to string
-                    let field_name_str = self.builder.build_global_string_ptr(field_name, &format!("field_{}", field_name))?;
+                    let field_name_str = self
+                        .builder
+                        .build_global_string_ptr(field_name, &format!("field_{}", field_name))?;
 
                     // Set the field in the map
                     self.set_map_entry(
                         struct_handle,
-                        EvaluatedValue::with_value(field_name_str.as_pointer_value().into(), OtterType::Str),
+                        EvaluatedValue::with_value(
+                            field_name_str.as_pointer_value().into(),
+                            OtterType::Str,
+                        ),
                         field_value,
                     )?;
                 }
@@ -2710,15 +2760,26 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
         field: &str,
         _ctx: &mut FunctionContext<'ctx>,
     ) -> Result<EvaluatedValue<'ctx>> {
-        if let Expr::Identifier(enum_or_module_name) = object {
+        if let Expr::Identifier {
+            name: enum_or_module_name,
+            ..
+        } = object
+        {
             // Check if this is an enum constructor (for no-arg variants like Option.None)
             if (enum_or_module_name == "Option" || enum_or_module_name == "Result")
-                && self.symbol_registry.resolve(&format!("{}.{}", enum_or_module_name, field)).is_none() {
+                && self
+                    .symbol_registry
+                    .resolve(&format!("{}.{}", enum_or_module_name, field))
+                    .is_none()
+            {
                 // Get variant index for no-arg variant
                 if let Some(variant_tag) = self.get_variant_index(enum_or_module_name, field) {
                     // Encode enum value with no payload
                     let encoded = self.encode_enum_value(variant_tag, None)?;
-                    return Ok(EvaluatedValue::with_value(encoded.into(), OtterType::Opaque));
+                    return Ok(EvaluatedValue::with_value(
+                        encoded.into(),
+                        OtterType::Opaque,
+                    ));
                 }
             }
 
@@ -2815,9 +2876,9 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
         ctx: &mut FunctionContext<'ctx>,
     ) -> Result<EvaluatedValue<'ctx>> {
         let (symbol_name, actual_args) = match callee {
-            Expr::Identifier(name) => (Some(name.clone()), args.to_vec()),
+            Expr::Identifier { name, .. } => (Some(name.clone()), args.to_vec()),
             Expr::Member { object, field } => {
-                if let Expr::Identifier(module) = object.as_ref() {
+                if let Expr::Identifier { name: module, .. } = object.as_ref() {
                     (Some(format!("{module}.{field}")), args.to_vec())
                 } else {
                     let method_symbol = self
@@ -2847,13 +2908,18 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
 
         if let Some(symbol_name) = symbol_name {
             if let Expr::Member { object, field } = callee {
-                if let Expr::Identifier(enum_name) = object.as_ref() {
-                    if (enum_name == "Option" || enum_name == "Result") 
-                        && self.symbol_registry.resolve(&symbol_name).is_none() {
+                if let Expr::Identifier {
+                    name: enum_name, ..
+                } = object.as_ref()
+                {
+                    if (enum_name == "Option" || enum_name == "Result")
+                        && self.symbol_registry.resolve(&symbol_name).is_none()
+                    {
                         // Get variant index
-                        let variant_tag = self
-                            .get_variant_index(enum_name, field)
-                            .ok_or_else(|| anyhow!("unknown enum variant {}.{}", enum_name, field))?;
+                        let variant_tag =
+                            self.get_variant_index(enum_name, field).ok_or_else(|| {
+                                anyhow!("unknown enum variant {}.{}", enum_name, field)
+                            })?;
 
                         // Evaluate payload if present
                         let payload = if actual_args.is_empty() {
@@ -2863,32 +2929,70 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                             // Single argument - evaluate and convert to i64
                             let arg_value = self.eval_expr(&actual_args[0], ctx)?;
                             let payload_i64 = match arg_value.ty {
-                                OtterType::I64 => {
-                                    arg_value.value.ok_or_else(|| anyhow!("missing i64 value"))?.into_int_value()
-                                }
+                                OtterType::I64 => arg_value
+                                    .value
+                                    .ok_or_else(|| anyhow!("missing i64 value"))?
+                                    .into_int_value(),
                                 OtterType::I32 => {
-                                    let i32_val = arg_value.value.ok_or_else(|| anyhow!("missing i32 value"))?.into_int_value();
-                                    self.builder.build_int_z_extend(i32_val, self.context.i64_type(), "extend_i32")?
+                                    let i32_val = arg_value
+                                        .value
+                                        .ok_or_else(|| anyhow!("missing i32 value"))?
+                                        .into_int_value();
+                                    self.builder.build_int_z_extend(
+                                        i32_val,
+                                        self.context.i64_type(),
+                                        "extend_i32",
+                                    )?
                                 }
                                 OtterType::F64 => {
-                                    let float_val = arg_value.value.ok_or_else(|| anyhow!("missing f64 value"))?.into_float_value();
-                                    let alloca = self.builder.build_alloca(self.context.f64_type(), "float_payload")?;
+                                    let float_val = arg_value
+                                        .value
+                                        .ok_or_else(|| anyhow!("missing f64 value"))?
+                                        .into_float_value();
+                                    let alloca = self
+                                        .builder
+                                        .build_alloca(self.context.f64_type(), "float_payload")?;
                                     self.builder.build_store(alloca, float_val)?;
-                                    self.builder.build_ptr_to_int(alloca, self.context.i64_type(), "float_ptr_to_i64")?
+                                    self.builder.build_ptr_to_int(
+                                        alloca,
+                                        self.context.i64_type(),
+                                        "float_ptr_to_i64",
+                                    )?
                                 }
                                 OtterType::Str => {
                                     // For strings, use pointer as i64
-                                    let str_ptr = arg_value.value.ok_or_else(|| anyhow!("missing str value"))?.into_pointer_value();
-                                    self.builder.build_ptr_to_int(str_ptr, self.context.i64_type(), "str_ptr_to_i64")?
+                                    let str_ptr = arg_value
+                                        .value
+                                        .ok_or_else(|| anyhow!("missing str value"))?
+                                        .into_pointer_value();
+                                    self.builder.build_ptr_to_int(
+                                        str_ptr,
+                                        self.context.i64_type(),
+                                        "str_ptr_to_i64",
+                                    )?
                                 }
                                 OtterType::Bool => {
-                                    let bool_val = arg_value.value.ok_or_else(|| anyhow!("missing bool value"))?.into_int_value();
-                                    self.builder.build_int_z_extend(bool_val, self.context.i64_type(), "extend_bool")?
+                                    let bool_val = arg_value
+                                        .value
+                                        .ok_or_else(|| anyhow!("missing bool value"))?
+                                        .into_int_value();
+                                    self.builder.build_int_z_extend(
+                                        bool_val,
+                                        self.context.i64_type(),
+                                        "extend_bool",
+                                    )?
                                 }
                                 _ => {
                                     // For other types, convert pointer to i64
-                                    let ptr = arg_value.value.ok_or_else(|| anyhow!("missing value"))?.into_pointer_value();
-                                    self.builder.build_ptr_to_int(ptr, self.context.i64_type(), "ptr_to_i64")?
+                                    let ptr = arg_value
+                                        .value
+                                        .ok_or_else(|| anyhow!("missing value"))?
+                                        .into_pointer_value();
+                                    self.builder.build_ptr_to_int(
+                                        ptr,
+                                        self.context.i64_type(),
+                                        "ptr_to_i64",
+                                    )?
                                 }
                             };
                             Some(payload_i64)
@@ -2898,11 +3002,14 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
 
                         // Encode enum value
                         let encoded = self.encode_enum_value(variant_tag, payload)?;
-                        return Ok(EvaluatedValue::with_value(encoded.into(), OtterType::Opaque));
+                        return Ok(EvaluatedValue::with_value(
+                            encoded.into(),
+                            OtterType::Opaque,
+                        ));
                     }
                 }
             }
-            
+
             if let Some(symbol) = self.symbol_registry.resolve(&symbol_name) {
                 if symbol.signature.params.len() != actual_args.len() {
                     bail!(
@@ -3052,14 +3159,14 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                 });
             }
 
-            if let Expr::Identifier(name) = callee {
+            if let Expr::Identifier { name, .. } = callee {
                 return self.call_user_defined_function(name, args, ctx);
             }
 
             bail!("unknown function `{symbol_name}`");
         }
 
-        if let Expr::Identifier(name) = callee {
+        if let Expr::Identifier { name, .. } = callee {
             return self.call_user_defined_function(name, args, ctx);
         }
 
@@ -3075,7 +3182,14 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
             if let Some(base) = self.call_base_name(func) {
                 let spawn_name = format!("{}_spawn", base);
                 if self.symbol_registry.contains(&spawn_name) {
-                    return self.eval_call(&Expr::Identifier(spawn_name), args, ctx);
+                    return self.eval_call(
+                        &Expr::Identifier {
+                            name: spawn_name,
+                            span: None,
+                        },
+                        args,
+                        ctx,
+                    );
                 }
             }
         }
@@ -3096,11 +3210,21 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                     && self.symbol_registry.contains(&await_name)
                 {
                     // First call spawn(...)
-                    let spawn_val = self.eval_call(&Expr::Identifier(spawn_name), args, ctx)?;
+                    let spawn_val = self.eval_call(
+                        &Expr::Identifier {
+                            name: spawn_name,
+                            span: None,
+                        },
+                        args,
+                        ctx,
+                    )?;
                     // Then call await(handle)
                     return self
                         .eval_call(
-                            &Expr::Identifier(await_name),
+                            &Expr::Identifier {
+                                name: await_name,
+                                span: None,
+                            },
                             &[Expr::Literal(ast::nodes::Literal::Number(
                                 ast::nodes::NumberLiteral::new(0.0, true),
                             ))],
@@ -3137,9 +3261,9 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
 
     fn call_base_name(&self, callee: &Expr) -> Option<String> {
         match callee {
-            Expr::Identifier(name) => Some(name.clone()),
+            Expr::Identifier { name, .. } => Some(name.clone()),
             Expr::Member { object, field } => {
-                if let Expr::Identifier(module) = object.as_ref() {
+                if let Expr::Identifier { name: module, .. } = object.as_ref() {
                     Some(format!("{module}.{field}"))
                 } else {
                     None
@@ -4490,13 +4614,18 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
             let payload_i64 = if payload_val.get_type().get_bit_width() == 64 {
                 payload_val
             } else {
-                self.builder
-                    .build_int_z_extend(payload_val, self.context.i64_type(), "extend_payload")?
+                self.builder.build_int_z_extend(
+                    payload_val,
+                    self.context.i64_type(),
+                    "extend_payload",
+                )?
             };
             // Mask payload to lower 32 bits
             let mask = self.context.i64_type().const_int(0xFFFFFFFF, false);
             let payload_masked = self.builder.build_and(payload_i64, mask, "mask_payload")?;
-            Ok(self.builder.build_or(tag_shifted, payload_masked, "encode_enum")?)
+            Ok(self
+                .builder
+                .build_or(tag_shifted, payload_masked, "encode_enum")?)
         } else {
             // No payload, just return the tag
             Ok(tag_shifted)
@@ -4507,12 +4636,9 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
     fn get_variant_tag(&mut self, enum_value: IntValue<'ctx>) -> Result<IntValue<'ctx>> {
         // Extract upper 32 bits: (value >> 32) & 0xFFFFFFFF
         let shift_amt = self.context.i64_type().const_int(32, false);
-        let shifted = self.builder.build_right_shift(
-            enum_value,
-            shift_amt,
-            false,
-            "shift_for_tag",
-        )?;
+        let shifted =
+            self.builder
+                .build_right_shift(enum_value, shift_amt, false, "shift_for_tag")?;
         let mask = self.context.i64_type().const_int(0xFFFFFFFF, false);
         Ok(self.builder.build_and(shifted, mask, "extract_tag")?)
     }
@@ -4521,7 +4647,9 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
     fn get_variant_payload(&mut self, enum_value: IntValue<'ctx>) -> Result<IntValue<'ctx>> {
         // Extract lower 32 bits: value & 0xFFFFFFFF
         let mask = self.context.i64_type().const_int(0xFFFFFFFF, false);
-        Ok(self.builder.build_and(enum_value, mask, "extract_payload")?)
+        Ok(self
+            .builder
+            .build_and(enum_value, mask, "extract_payload")?)
     }
 
     /// Get variant index for a given enum name and variant name
@@ -4556,7 +4684,11 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                 let lit_value = self.eval_literal(lit)?;
                 self.compare_values_for_equality(value, &lit_value)
             }
-            ast::nodes::Pattern::EnumVariant { enum_name, variant, fields: _ } => {
+            ast::nodes::Pattern::EnumVariant {
+                enum_name,
+                variant,
+                fields: _,
+            } => {
                 // Extract variant tag from enum value
                 let enum_value = value
                     .value
@@ -4585,7 +4717,10 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                 warn!("Struct pattern matching not yet implemented for {}", name);
                 Ok(self.context.bool_type().const_int(0, false))
             }
-            ast::nodes::Pattern::Array { patterns: _, rest: _ } => {
+            ast::nodes::Pattern::Array {
+                patterns: _,
+                rest: _,
+            } => {
                 warn!("Array pattern matching not yet implemented");
                 Ok(self.context.bool_type().const_int(0, false))
             }
@@ -4606,7 +4741,9 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
             ast::nodes::Pattern::Identifier(name) => {
                 // Bind the entire value to the identifier
                 if let Some(value_val) = value.value {
-                    let alloca = self.builder.build_alloca(self.basic_type(value.ty)?, name)?;
+                    let alloca = self
+                        .builder
+                        .build_alloca(self.basic_type(value.ty)?, name)?;
                     self.builder.build_store(alloca, value_val)?;
                     ctx.insert(
                         name.clone(),
@@ -4620,7 +4757,11 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
             ast::nodes::Pattern::Literal(_) => {
                 // Literals don't bind variables
             }
-            ast::nodes::Pattern::EnumVariant { enum_name: _, variant: _, fields } => {
+            ast::nodes::Pattern::EnumVariant {
+                enum_name: _,
+                variant: _,
+                fields,
+            } => {
                 // Extract payload from enum value
                 let enum_value = value
                     .value
@@ -4632,10 +4773,9 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                 if fields.len() == 1 {
                     if let ast::nodes::Pattern::Identifier(name) = &fields[0] {
                         let payload_ty = OtterType::Opaque;
-                        let alloca = self.builder.build_alloca(
-                            self.basic_type(payload_ty)?,
-                            name,
-                        )?;
+                        let alloca = self
+                            .builder
+                            .build_alloca(self.basic_type(payload_ty)?, name)?;
                         self.builder.build_store(alloca, payload)?;
                         ctx.insert(
                             name.clone(),
@@ -4670,7 +4810,9 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                 for (_field_name, field_pattern) in fields {
                     if let Some(ast::nodes::Pattern::Identifier(var_name)) = field_pattern {
                         // Create dummy binding
-                        let alloca = self.builder.build_alloca(self.context.i64_type(), var_name)?;
+                        let alloca = self
+                            .builder
+                            .build_alloca(self.context.i64_type(), var_name)?;
                         let zero = self.context.i64_type().const_int(0, false);
                         self.builder.build_store(alloca, zero)?;
                         ctx.insert(
@@ -4701,7 +4843,9 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                     }
                 }
                 if let Some(rest_name) = rest {
-                    let alloca = self.builder.build_alloca(self.context.i64_type(), rest_name)?;
+                    let alloca = self
+                        .builder
+                        .build_alloca(self.context.i64_type(), rest_name)?;
                     let zero = self.context.i64_type().const_int(0, false);
                     self.builder.build_store(alloca, zero)?;
                     ctx.insert(
@@ -4810,7 +4954,10 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                     "ValueError" | "TypeError" | "RuntimeError" | "KeyError" | "IndexError" => {
                         // For now, assume these match if we have an error
                         // In a real implementation, we'd check error codes or message patterns
-                        warn!("Exception type checking for {} is not fully implemented yet", type_name);
+                        warn!(
+                            "Exception type checking for {} is not fully implemented yet",
+                            type_name
+                        );
                         Ok(self.context.bool_type().const_int(1, false))
                     }
                     _ => {
@@ -4823,7 +4970,10 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
             ast::nodes::Type::Generic { base, args } => {
                 // For generic types like Result<T, E>, Option<T>, etc.
                 // These are typically not exception types, so assume no match
-                warn!("Generic exception types not supported: {}<{:?}>", base, args);
+                warn!(
+                    "Generic exception types not supported: {}<{:?}>",
+                    base, args
+                );
                 Ok(self.context.bool_type().const_int(0, false))
             }
         }

@@ -40,28 +40,22 @@ impl EventHandler {
                     .unwrap_or_else(|| Duration::from_secs(0));
 
                 match event::poll(timeout) {
-                    Ok(true) => {
-                        match event::read() {
-                            Ok(evt) => {
-                                match evt {
-                                    Event::Key(key) => {
-                                        if key.kind == KeyEventKind::Press {
-                                            let _ = event_tx.send(AppEvent::Key(key));
-                                        }
-                                    }
-                                    Event::Resize(w, h) => {
-                                        let _ = event_tx.send(AppEvent::Resize(w, h));
-                                    }
-                                    _ => {}
+                    Ok(true) => match event::read() {
+                        Ok(evt) => match evt {
+                            Event::Key(key) => {
+                                if key.kind == KeyEventKind::Press {
+                                    let _ = event_tx.send(AppEvent::Key(key));
                                 }
                             }
-                            Err(_) => {
+                            Event::Resize(w, h) => {
+                                let _ = event_tx.send(AppEvent::Resize(w, h));
                             }
-                        }
-                    }
+                            _ => {}
+                        },
+                        Err(_) => {}
+                    },
                     Ok(false) => {}
-                    Err(_) => {
-                    }
+                    Err(_) => {}
                 }
 
                 if last_tick.elapsed() >= tick_rate {
@@ -111,4 +105,3 @@ pub fn is_alt(key: &KeyEvent) -> bool {
 pub fn is_shift(key: &KeyEvent) -> bool {
     key.modifiers.contains(KeyModifiers::SHIFT)
 }
-

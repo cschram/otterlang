@@ -9,5 +9,5 @@ mod tui;
 mod ui;
 
 pub use engine::{EvaluationKind, EvaluationResult, ReplEngine};
-pub use state::{AppState, Mode, OutputKind, OutputEntry};
+pub use state::{AppState, Mode, OutputEntry, OutputKind};
 pub use tui::Tui;

@@ -34,7 +34,7 @@ impl CallGraph {
     fn extract_callees_from_stmt(&self, stmt: &Statement, callees: &mut Vec<String>) {
         match stmt {
             Statement::Expr(Expr::Call { func, .. }) => {
-                if let Expr::Identifier(name) = func.as_ref() {
+                if let Expr::Identifier { name, .. } = func.as_ref() {
                     callees.push(name.clone());
                 }
             }

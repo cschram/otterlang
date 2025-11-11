@@ -75,18 +75,18 @@ impl AppState {
     pub fn add_output(&mut self, content: String, kind: OutputKind) {
         use chrono::Local;
         let timestamp = Local::now().format("%H:%M:%S").to_string();
-        
+
         self.output.push_back(OutputEntry {
             content,
             kind,
             timestamp: Some(timestamp),
         });
-        
+
         // Limit output buffer size
         if self.output.len() > 1000 {
             self.output.pop_front();
         }
-        
+
         // Auto-scroll to bottom
         self.output_scroll = 0;
     }
@@ -111,7 +111,7 @@ impl AppState {
         if self.history.is_empty() {
             return;
         }
-        
+
         let index = self.history_index.unwrap_or(self.history.len());
         if index > 0 {
             self.history_index = Some(index - 1);
@@ -196,4 +196,3 @@ impl Default for AppState {
         Self::new()
     }
 }
-

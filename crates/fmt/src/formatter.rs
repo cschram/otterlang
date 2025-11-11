@@ -28,7 +28,9 @@ impl Formatter {
 
     fn format_statement(&self, stmt: &Statement, indent: usize) -> String {
         match stmt {
-            Statement::Let { name, expr, public, .. } => {
+            Statement::Let {
+                name, expr, public, ..
+            } => {
                 let pub_str = if *public { "pub " } else { "" };
                 format!(
                     "{}{}let {} = {}\n",
@@ -38,7 +40,7 @@ impl Formatter {
                     self.format_expr(expr, indent)
                 )
             }
-            Statement::Assignment { name, expr } => {
+            Statement::Assignment { name, expr, .. } => {
                 format!(
                     "{}{} = {}\n",
                     self.indent(indent),
@@ -341,7 +343,7 @@ impl Formatter {
     fn format_expr(&self, expr: &Expr, indent: usize) -> String {
         match expr {
             Expr::Literal(lit) => self.format_literal(lit),
-            Expr::Identifier(name) => name.clone(),
+            Expr::Identifier { name, .. } => name.clone(),
             Expr::Binary { op, left, right } => {
                 format!(
                     "{} {} {}",

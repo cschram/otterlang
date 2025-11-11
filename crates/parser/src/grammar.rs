@@ -178,16 +178,20 @@ fn parse_fstring(content: String) -> Expr {
                                         Err(_) => {
                                             // Fallback to simple identifier if parsing fails
                                             parts.push(FStringPart::Expr(Box::new(
-                                                Expr::Identifier(trimmed.to_string()),
+                                                Expr::Identifier {
+                                                    name: trimmed.to_string(),
+                                                    span: None,
+                                                },
                                             )));
                                         }
                                     }
                                 }
                                 Err(_) => {
                                     // Fallback to simple identifier if tokenization fails
-                                    parts.push(FStringPart::Expr(Box::new(Expr::Identifier(
-                                        trimmed.to_string(),
-                                    ))));
+                                    parts.push(FStringPart::Expr(Box::new(Expr::Identifier {
+                                        name: trimmed.to_string(),
+                                        span: None,
+                                    })));
                                 }
                             }
                         }
@@ -269,20 +273,17 @@ fn expr_parser() -> impl Parser<TokenKind, Expr, Error = Simple<TokenKind>> {
     recursive(|expr| {
         let lambda_param = identifier_parser()
             .map_with_span(|name, span| (name, span))
-            .then(
-                choice((
-                    just(TokenKind::Colon).ignore_then(type_parser()).map(Some),
-                    empty().to(None),
-                ))
-            )
-            .then(
-                choice((
-                    just(TokenKind::Equals).ignore_then(expr.clone()).map(Some),
-                    empty().to(None),
-                ))
-            )
+            .then(choice((
+                just(TokenKind::Colon).ignore_then(type_parser()).map(Some),
+                empty().to(None),
+            )))
+            .then(choice((
+                just(TokenKind::Equals).ignore_then(expr.clone()).map(Some),
+                empty().to(None),
+            )))
             .map(|(((name, name_span), ty), default)| {
-                Param::new(name, ty, default).with_span(Some(Span::new(name_span.start, name_span.end)))
+                Param::new(name, ty, default)
+                    .with_span(Some(Span::new(name_span.start, name_span.end)))
             });
 
         let lambda_params = lambda_param
@@ -386,7 +387,10 @@ fn expr_parser() -> impl Parser<TokenKind, Expr, Error = Simple<TokenKind>> {
             literal_expr_parser(),
             lambda_expr,
             struct_init_pythonic,
-            identifier_parser().map(Expr::Identifier),
+            identifier_parser().map_with_span(|name, span| Expr::Identifier {
+                name,
+                span: Some(Span::new(span.start, span.end)),
+            }),
             expr.clone()
                 .delimited_by(just(TokenKind::LParen), just(TokenKind::RParen)),
             list_comprehension,
@@ -698,7 +702,10 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
         )
         .map(|arg| {
             Statement::Expr(Expr::Call {
-                func: Box::new(Expr::Identifier("print".to_string())),
+                func: Box::new(Expr::Identifier {
+                    name: "print".to_string(),
+                    span: None,
+                }),
                 args: vec![arg],
             })
         });
@@ -715,15 +722,18 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
         .then(identifier_parser().map_with_span(|name, span| (name, span)))
         .then_ignore(just(TokenKind::Equals))
         .then(expr.clone())
-        .map(|(((pub_kw, _let), (name, name_span)), expr)| Statement::Let {
-            name,
-            expr,
-            public: pub_kw.is_some(),
-            span: Some(Span::new(name_span.start, name_span.end)),
-        });
+        .map(
+            |(((pub_kw, _let), (name, name_span)), expr)| Statement::Let {
+                name,
+                expr,
+                public: pub_kw.is_some(),
+                span: Some(Span::new(name_span.start, name_span.end)),
+            },
+        );
 
     // Simple assignments (=) are handled by let_stmt (declaration or reassignment)
     let assignment_stmt = identifier_parser()
+        .map_with_span(|name, span| (name, Span::new(span.start, span.end)))
         .then(choice((
             just(TokenKind::PlusEq).to(BinaryOp::Add),
             just(TokenKind::MinusEq).to(BinaryOp::Sub),
@@ -731,14 +741,21 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
             just(TokenKind::SlashEq).to(BinaryOp::Div),
         )))
         .then(expr.clone())
-        .map(|((name, op), rhs)| {
+        .map(|(((name, name_span), op), rhs)| {
             // Desugar: x += y becomes x = x + y
             let expr = Expr::Binary {
                 op,
-                left: Box::new(Expr::Identifier(name.clone())),
+                left: Box::new(Expr::Identifier {
+                    name: name.clone(),
+                    span: None,
+                }),
                 right: Box::new(rhs),
             };
-            Statement::Assignment { name, expr }
+            Statement::Assignment {
+                name,
+                expr,
+                span: Some(name_span),
+            }
         });
 
     let path_segment = choice((
@@ -996,18 +1013,14 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
 
     let function_param = identifier_parser()
         .map_with_span(|name, span| (name, span))
-        .then(
-            choice((
-                just(TokenKind::Colon).ignore_then(type_parser()).map(Some),
-                empty().to(None),
-            ))
-        )
-        .then(
-            choice((
-                just(TokenKind::Equals).ignore_then(expr.clone()).map(Some),
-                empty().to(None),
-            ))
-        )
+        .then(choice((
+            just(TokenKind::Colon).ignore_then(type_parser()).map(Some),
+            empty().to(None),
+        )))
+        .then(choice((
+            just(TokenKind::Equals).ignore_then(expr.clone()).map(Some),
+            empty().to(None),
+        )))
         .map(|(((name, name_span), ty), default)| {
             Param::new(name, ty, default).with_span(Some(Span::new(name_span.start, name_span.end)))
         });
@@ -1098,18 +1111,14 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
     // Recreate parsers for method definition
     let method_function_param = identifier_parser()
         .map_with_span(|name, span| (name, span))
-        .then(
-            choice((
-                just(TokenKind::Colon).ignore_then(type_parser()).map(Some),
-                empty().to(None),
-            ))
-        )
-        .then(
-            choice((
-                just(TokenKind::Equals).ignore_then(expr.clone()).map(Some),
-                empty().to(None),
-            ))
-        )
+        .then(choice((
+            just(TokenKind::Colon).ignore_then(type_parser()).map(Some),
+            empty().to(None),
+        )))
+        .then(choice((
+            just(TokenKind::Equals).ignore_then(expr.clone()).map(Some),
+            empty().to(None),
+        )))
         .map(|(((name, name_span), ty), default)| {
             Param::new(name, ty, default).with_span(Some(Span::new(name_span.start, name_span.end)))
         });
@@ -1137,7 +1146,8 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
             if method_params.is_empty() || method_params[0].name != "self" {
                 // Add self parameter at the beginning
                 let self_type = Type::Simple("Self".to_string());
-                let self_param = Param::new("self".to_string(), Some(self_type), None).with_span(None);
+                let self_param =
+                    Param::new("self".to_string(), Some(self_type), None).with_span(None);
                 method_params.insert(0, self_param);
             }
             Function::new(name, method_params, ret_ty, body)

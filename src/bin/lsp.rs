@@ -4,4 +4,3 @@ use otterlang::lsp;
 async fn main() {
     lsp::run_stdio_server().await;
 }
-

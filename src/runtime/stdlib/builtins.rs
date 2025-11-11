@@ -1565,7 +1565,10 @@ fn register_builtin_symbols(registry: &SymbolRegistry) {
     registry.register(FfiFunction {
         name: "select.case".into(),
         symbol: "otter_builtin_select_case_create".into(),
-        signature: FfiSignature::new(vec![FfiType::I64, FfiType::Bool, FfiType::Str], FfiType::Opaque),
+        signature: FfiSignature::new(
+            vec![FfiType::I64, FfiType::Bool, FfiType::Str],
+            FfiType::Opaque,
+        ),
     });
 
     registry.register(FfiFunction {

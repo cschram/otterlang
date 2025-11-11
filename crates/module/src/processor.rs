@@ -305,11 +305,7 @@ mod tests {
             "pub def sqrt(x: float) -> float:\n    return x * x\n",
         )
         .unwrap();
-        fs::write(
-            &facade_file,
-            "pub use ./math.sqrt\n",
-        )
-        .unwrap();
+        fs::write(&facade_file, "pub use ./math.sqrt\n").unwrap();
 
         let mut loader = ModuleLoader::new(source_dir.clone(), None);
         let math_module = loader.load_file(&math_file).unwrap();
@@ -323,7 +319,12 @@ mod tests {
             .resolve_re_exports(&mut facade_module, &all_modules)
             .unwrap();
 
-        assert!(facade_module.exports.functions.contains(&"sqrt".to_string()));
+        assert!(
+            facade_module
+                .exports
+                .functions
+                .contains(&"sqrt".to_string())
+        );
     }
 
     #[test]
@@ -340,11 +341,7 @@ mod tests {
             "pub def sin(x: float) -> float:\n    return x\n",
         )
         .unwrap();
-        fs::write(
-            &facade_file,
-            "pub use ./math.sin as sine\n",
-        )
-        .unwrap();
+        fs::write(&facade_file, "pub use ./math.sin as sine\n").unwrap();
 
         let mut loader = ModuleLoader::new(source_dir.clone(), None);
         let math_module = loader.load_file(&math_file).unwrap();
@@ -358,7 +355,12 @@ mod tests {
             .resolve_re_exports(&mut facade_module, &all_modules)
             .unwrap();
 
-        assert!(facade_module.exports.functions.contains(&"sine".to_string()));
+        assert!(
+            facade_module
+                .exports
+                .functions
+                .contains(&"sine".to_string())
+        );
         assert!(!facade_module.exports.functions.contains(&"sin".to_string()));
     }
 
@@ -376,11 +378,7 @@ mod tests {
             "pub def sqrt(x: float) -> float:\n    return x * x\npub def sin(x: float) -> float:\n    return x\n",
         )
         .unwrap();
-        fs::write(
-            &facade_file,
-            "pub use ./math\n",
-        )
-        .unwrap();
+        fs::write(&facade_file, "pub use ./math\n").unwrap();
 
         let mut loader = ModuleLoader::new(source_dir.clone(), None);
         let math_module = loader.load_file(&math_file).unwrap();
@@ -394,7 +392,12 @@ mod tests {
             .resolve_re_exports(&mut facade_module, &all_modules)
             .unwrap();
 
-        assert!(facade_module.exports.functions.contains(&"sqrt".to_string()));
+        assert!(
+            facade_module
+                .exports
+                .functions
+                .contains(&"sqrt".to_string())
+        );
         assert!(facade_module.exports.functions.contains(&"sin".to_string()));
     }
 
@@ -412,11 +415,7 @@ mod tests {
             "pub def sqrt(x: float) -> float:\n    return x * x\n",
         )
         .unwrap();
-        fs::write(
-            &facade_file,
-            "pub use ./math.nonexistent\n",
-        )
-        .unwrap();
+        fs::write(&facade_file, "pub use ./math.nonexistent\n").unwrap();
 
         let mut loader = ModuleLoader::new(source_dir.clone(), None);
         let math_module = loader.load_file(&math_file).unwrap();
@@ -428,9 +427,6 @@ mod tests {
 
         let result = loader.resolve_re_exports(&mut facade_module, &all_modules);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("cannot re-export"));
+        assert!(result.unwrap_err().to_string().contains("cannot re-export"));
     }
 }

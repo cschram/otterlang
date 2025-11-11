@@ -153,6 +153,7 @@ pub enum Statement {
     Assignment {
         name: String,
         expr: Expr,
+        span: Option<Span>,
     },
 
     // Control flow
@@ -212,7 +213,7 @@ pub enum Statement {
     // Re-exports
     PubUse {
         module: String,
-        item: Option<String>, // None means re-export all public items
+        item: Option<String>,  // None means re-export all public items
         alias: Option<String>, // Optional rename
     },
 
@@ -316,7 +317,10 @@ pub enum Expr {
     Literal(Literal),
 
     // Variables and access
-    Identifier(String),
+    Identifier {
+        name: String,
+        span: Option<Span>,
+    },
     Member {
         object: Box<Expr>,
         field: String,

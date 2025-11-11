@@ -67,7 +67,7 @@ impl Inliner {
         // Implementation would traverse AST and replace parameter references
         // This is a placeholder for the full implementation
         match stmt {
-            Statement::Expr(Expr::Identifier(ref mut name)) => {
+            Statement::Expr(Expr::Identifier { name, .. }) => {
                 if let Some((idx, _)) = params.iter().enumerate().find(|(_, p)| p.name == *name) {
                     if idx < args.len() {
                         // This is simplified - would need proper expression replacement

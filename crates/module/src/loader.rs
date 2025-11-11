@@ -165,15 +165,13 @@ impl ModuleLoader {
                 let source_path = self.resolver.resolve(source_module)?;
 
                 // Get the source module
-                let source_module_data = all_modules
-                    .get(&source_path)
-                    .ok_or_else(|| {
-                        anyhow::anyhow!(
-                            "re-export source module not found: {} (resolved to {})",
-                            source_module,
-                            source_path.display()
-                        )
-                    })?;
+                let source_module_data = all_modules.get(&source_path).ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "re-export source module not found: {} (resolved to {})",
+                        source_module,
+                        source_path.display()
+                    )
+                })?;
 
                 if let Some(item_name) = item {
                     // Re-export specific item

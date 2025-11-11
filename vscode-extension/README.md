@@ -6,7 +6,11 @@ Language support for OtterLang in Visual Studio Code.
 
 - **Syntax Highlighting** - Comprehensive colorized code editing
 - **Language Server Protocol** - Full LSP support:
-  - Diagnostics and error checking
+  - **Rich Diagnostics** - Enhanced error messages with:
+    - Precise source location highlighting
+    - Contextual suggestions for common mistakes
+    - Helpful explanations and guidance
+    - Type error reporting with detailed information
   - Go to definition (F12)
   - Go to type definition
   - Go to implementation

@@ -11,7 +11,7 @@ use crate::codegen::{
     self, build_executable, BuildArtifact, CodegenOptLevel, CodegenOptions, TargetTriple,
 };
 use crate::runtime::ffi;
-use crate::typecheck::TypeChecker;
+use crate::typecheck::{self, TypeChecker};
 use crate::version::VERSION;
 use cache::{CacheBuildOptions, CacheEntry, CacheManager, CacheMetadata, CompilationInputs};
 use language::LanguageFeatureFlags;
@@ -300,10 +300,9 @@ fn compile_pipeline(
         profiler.record_phase("Type Checking", || type_checker.check_program(&program));
 
     if let Err(err) = type_check_result {
-        println!("\n== Type Errors ==");
-        for error in type_checker.errors() {
-            println!("  {}", error);
-        }
+        let diagnostics =
+            typecheck::diagnostics_from_type_errors(type_checker.errors(), &source_id, source);
+        emit_diagnostics(&diagnostics, source);
         return Err(err).with_context(|| "type checking failed");
     }
 
@@ -638,11 +637,7 @@ fn print_timings(stage: &CompilationStage) {
             pct
         );
     }
-    println!(
-        "  {:20} {:8.2}ms",
-        "Total",
-        total.as_secs_f64() * 1000.0
-    );
+    println!("  {:20} {:8.2}ms", "Total", total.as_secs_f64() * 1000.0);
 }
 
 fn handle_fmt(paths: &[PathBuf]) -> Result<()> {
@@ -710,7 +705,7 @@ fn handle_fmt(paths: &[PathBuf]) -> Result<()> {
 
 fn handle_repl() -> Result<()> {
     use crate::repl::{ReplEngine, Tui};
-    
+
     let engine = ReplEngine::new();
     match Tui::new(engine) {
         Ok(mut tui) => {
@@ -724,7 +719,9 @@ fn handle_repl() -> Result<()> {
         Err(e) => {
             eprintln!("Failed to initialize TUI: {}", e);
             eprintln!("Error chain: {:?}", e);
-            Err(e).with_context(|| "Failed to initialize TUI. Make sure you're running in a terminal.")
+            Err(e).with_context(|| {
+                "Failed to initialize TUI. Make sure you're running in a terminal."
+            })
         }
     }
 }

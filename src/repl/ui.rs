@@ -3,7 +3,9 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, List, ListItem, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState};
+use ratatui::widgets::{
+    Block, Borders, List, ListItem, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState,
+};
 use ratatui::Frame;
 
 use crate::repl::state::{AppState, Mode, OutputKind};
@@ -70,13 +72,12 @@ fn draw_output(frame: &mut Frame, state: &mut AppState, area: Rect) {
         })
         .collect();
 
-    let list = List::new(items)
-        .block(
-            Block::default()
-                .title("Output")
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Blue)),
-        );
+    let list = List::new(items).block(
+        Block::default()
+            .title("Output")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Blue)),
+    );
 
     frame.render_widget(list, area);
 
@@ -108,18 +109,17 @@ fn draw_input(frame: &mut Frame, state: &mut AppState, area: Rect) {
         .enumerate()
         .map(|(i, line)| {
             let mut spans = vec![];
-            
+
             // Add prompt for first line
             if i == 0 {
                 spans.push(Span::styled(
                     prompt,
-                    Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
                 ));
             } else {
-                spans.push(Span::styled(
-                    "      ",
-                    Style::default(),
-                ));
+                spans.push(Span::styled("      ", Style::default()));
             }
 
             // Add line content with cursor
@@ -132,10 +132,7 @@ fn draw_input(frame: &mut Frame, state: &mut AppState, area: Rect) {
                         Style::default().bg(Color::White).fg(Color::Black),
                     ));
                 } else {
-                    spans.push(Span::styled(
-                        ch.to_string(),
-                        Style::default(),
-                    ));
+                    spans.push(Span::styled(ch.to_string(), Style::default()));
                 }
             }
 
@@ -165,7 +162,10 @@ fn draw_input(frame: &mut Frame, state: &mut AppState, area: Rect) {
     // Set cursor position
     let cursor_x = area.x
         + prompt.len() as u16
-        + state.cursor.1.min(lines.get(state.cursor.0).map(|l| l.len()).unwrap_or(0)) as u16
+        + state
+            .cursor
+            .1
+            .min(lines.get(state.cursor.0).map(|l| l.len()).unwrap_or(0)) as u16
         + 1; // +1 for border
     let cursor_y = area.y + state.cursor.0 as u16 + 1; // +1 for border
     frame.set_cursor_position(ratatui::layout::Position::new(cursor_x, cursor_y));
@@ -184,7 +184,7 @@ fn draw_history(frame: &mut Frame, state: &mut AppState, area: Rect) {
         .map(|(i, cmd)| {
             let idx = state.history.len() - state.history_scroll - (area.height as usize - 2) + i;
             let is_selected = state.history_index.map(|hi| hi == idx).unwrap_or(false);
-            
+
             let style = if is_selected {
                 Style::default()
                     .fg(Color::Black)
@@ -199,13 +199,12 @@ fn draw_history(frame: &mut Frame, state: &mut AppState, area: Rect) {
         })
         .collect();
 
-    let list = List::new(items)
-        .block(
-            Block::default()
-                .title("History")
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(Color::Magenta)),
-        );
+    let list = List::new(items).block(
+        Block::default()
+            .title("History")
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Magenta)),
+    );
 
     frame.render_widget(list, area);
 
@@ -249,13 +248,12 @@ fn draw_status_bar(frame: &mut Frame, state: &AppState, area: Rect) {
         }
     );
 
-    let paragraph = Paragraph::new(status_text)
-        .style(
-            Style::default()
-                .fg(Color::Black)
-                .bg(Color::White)
-                .add_modifier(Modifier::BOLD),
-        );
+    let paragraph = Paragraph::new(status_text).style(
+        Style::default()
+            .fg(Color::Black)
+            .bg(Color::White)
+            .add_modifier(Modifier::BOLD),
+    );
 
     frame.render_widget(paragraph, status_area);
 }
@@ -319,4 +317,3 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         ])
         .split(popup_layout[1])[1]
 }
-

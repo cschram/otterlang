@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use ast::nodes::{EnumVariant, Type};
+use common::Span;
 
 use language::LanguageFeatureFlags;
 
@@ -427,6 +428,7 @@ pub struct TypeError {
     pub message: String,
     pub hint: Option<String>,
     pub help: Option<String>,
+    pub span: Option<Span>,
 }
 
 impl TypeError {
@@ -435,6 +437,7 @@ impl TypeError {
             message,
             hint: None,
             help: None,
+            span: None,
         }
     }
 
@@ -447,16 +450,26 @@ impl TypeError {
         self.help = Some(help);
         self
     }
+
+    pub fn with_span(mut self, span: Span) -> Self {
+        self.span = Some(span);
+        self
+    }
+
+    pub fn with_optional_span(mut self, span: Option<Span>) -> Self {
+        self.span = span;
+        self
+    }
 }
 
 impl std::fmt::Display for TypeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.message)?;
         if let Some(hint) = &self.hint {
-            write!(f, "\n💡 Suggestion: {}", hint)?;
+            write!(f, "\nSuggestion: {}", hint)?;
         }
         if let Some(help) = &self.help {
-            write!(f, "\nℹ️  {}", help)?;
+            write!(f, "\n{}", help)?;
         }
         Ok(())
     }

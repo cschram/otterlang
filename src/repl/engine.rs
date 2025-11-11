@@ -42,7 +42,6 @@ impl ReplEngine {
         }
     }
 
-
     pub fn evaluate(&mut self, input: &str) -> Result<EvaluationResult> {
         match input.trim() {
             "clear" => {
@@ -146,7 +145,6 @@ impl ReplEngine {
             kind: EvaluationKind::Success,
         })
     }
-
 
     fn parse_expression(&self, input: &str) -> Result<Expr> {
         let tokens =

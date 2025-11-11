@@ -22,7 +22,7 @@ impl TypeTracker {
                 ast::nodes::Literal::String(_) => RuntimeType::Str,
                 _ => RuntimeType::Unknown,
             },
-            Expr::Identifier(_) => RuntimeType::Unknown, // Would need symbol table lookup
+            Expr::Identifier { .. } => RuntimeType::Unknown, // Would need symbol table lookup
             _ => RuntimeType::Unknown,
         }
     }
