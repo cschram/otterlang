@@ -155,9 +155,13 @@ impl RustStubGenerator {
                     None => TypeSpec::Unit,
                 };
 
-                // Export name uses dot notation; symbol uses stable otter_ prefix (already built by generator if not provided).
-                let export_name = path.segments.join(".");
-                let rust_path = Some(format!("{}", path.segments.join("::")));
+                let (export_name, rust_path) = if path.segments.is_empty() {
+                    (sig.name.clone(), Some(format!("{}::{}", self.dependency.name, sig.name)))
+                } else {
+                    let export = path.segments.join(".");
+                    let rust = path.segments.join("::");
+                    (export, Some(rust))
+                };
 
                 if sig.is_async || matches!(sig.return_type, Some(RustTypeRef::Future { .. })) {
                     // Async shims: spawn -> Opaque handle, await -> T
@@ -242,7 +246,12 @@ impl RustStubGenerator {
                             .map(|i| format!("{{{}}}", i))
                             .collect::<Vec<_>>()
                             .join(", ");
-                        let rust_call = format!("{}({})", path.segments.join("::"), args_ph);
+                        let rust_call_path = if path.segments.is_empty() {
+                            format!("{}::{}", self.dependency.name, sig.name)
+                        } else {
+                            path.segments.join("::")
+                        };
+                        let rust_call = format!("{}({})", rust_call_path, args_ph);
 
                         match ret_ty {
                             RustTypeRef::Option { .. } => {
@@ -337,13 +346,10 @@ impl RustStubGenerator {
         ));
 
         // Add crate-specific imports
-        if self.dependency.name == "rand" {
-            source.push_str("use rand::distributions::Distribution;\n");
-        }
         source.push_str("\n");
 
         source.push_str(
-            "#[allow(dead_code)]\nmod ffi_store {\n    use super::*;\n    use std::collections::HashMap;\n\n    struct Entry {\n        value: Box<dyn Any + Send + Sync>,\n        refs: u64,\n    }\n\n    static NEXT_ID: AtomicU64 = AtomicU64::new(1);\n    static STORE: Lazy<Mutex<HashMap<u64, Entry>>> = Lazy::new(|| Mutex::new(HashMap::new()));\n\n    pub fn insert<T: Any + Send + Sync + 'static>(value: T) -> i64 {\n        let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);\n        STORE.lock().insert(id, Entry { value: Box::new(value), refs: 1 });\n        id as i64\n    }\n\n    pub fn clone_handle(id: i64) -> i64 {\n        let mut store = STORE.lock();\n        if let Some(entry) = store.get_mut(&(id as u64)) {\n            entry.refs += 1;\n            id\n        } else {\n            panic!(\"invalid opaque handle\");\n        }\n    }\n\n    pub fn release_handle(id: i64) {\n        let mut store = STORE.lock();\n        if let Some(mut entry) = store.remove(&(id as u64)) {\n            if entry.refs > 1 {\n                entry.refs -= 1;\n                store.insert(id as u64, entry);\n            }\n        }\n    }\n\n    pub fn take<T: Any + Send + Sync + 'static>(id: i64) -> T {\n        let mut store = STORE.lock();\n        let key = id as u64;\n        if let Some(mut entry) = store.remove(&key) {\n            if entry.refs > 1 {\n                // put back with decreased ref and fail fast to catch misuse\n                entry.refs -= 1;\n                store.insert(key, entry);\n                panic!(\"opaque handle still referenced\");\n            }\n            *entry.value.downcast::<T>().map(|boxed| *boxed).expect(\"opaque handle type mismatch\")\n        } else {\n            panic!(\"invalid opaque handle\");\n        }\n    }\n\n    pub fn get<T: Any + Send + Sync + Clone + 'static>(id: i64) -> T {\n        let store = STORE.lock();\n        store\n            .get(&(id as u64))\n            .and_then(|e| e.value.downcast_ref::<T>())\n            .cloned()\n            .expect(\"invalid opaque handle\")\n    }\n}\n\n",
+            "#[allow(dead_code)]\nmod ffi_store {\n    use super::*;\n    use std::collections::HashMap;\n\n    struct Entry {\n        value: Box<dyn Any + Send + Sync>,\n        refs: u64,\n    }\n\n    static NEXT_ID: AtomicU64 = AtomicU64::new(1);\n    static STORE: Lazy<Mutex<HashMap<u64, Entry>>> = Lazy::new(|| Mutex::new(HashMap::new()));\n\n    pub fn insert<T: Any + Send + Sync + 'static>(value: T) -> i64 {\n        let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);\n        STORE.lock().insert(id, Entry { value: Box::new(value), refs: 1 });\n        id as i64\n    }\n\n    pub fn clone_handle(id: i64) -> i64 {\n        let mut store = STORE.lock();\n        if let Some(entry) = store.get_mut(&(id as u64)) {\n            entry.refs += 1;\n            id\n        } else {\n            panic!(\"invalid opaque handle\");\n        }\n    }\n\n    pub fn release_handle(id: i64) {\n        let mut store = STORE.lock();\n        if let Some(mut entry) = store.remove(&(id as u64)) {\n            if entry.refs > 1 {\n                entry.refs -= 1;\n                store.insert(id as u64, entry);\n            }\n        }\n    }\n\n    pub fn take<T: Any + Send + Sync + 'static>(id: i64) -> T {\n        let mut store = STORE.lock();\n        let key = id as u64;\n        if let Some(mut entry) = store.remove(&key) {\n            if entry.refs > 1 {\n                // put back with decreased ref and fail fast to catch misuse\n                entry.refs -= 1;\n                store.insert(key, entry);\n                panic!(\"opaque handle still referenced\");\n            }\n            entry.value.downcast::<T>().map(|boxed| *boxed).expect(\"opaque handle type mismatch\")\n        } else {\n            panic!(\"invalid opaque handle\");\n        }\n    }\n\n    pub fn get<T: Any + Send + Sync + Clone + 'static>(id: i64) -> T {\n        let store = STORE.lock();\n        store\n            .get(&(id as u64))\n            .and_then(|e| e.value.downcast_ref::<T>())\n            .cloned()\n            .expect(\"invalid opaque handle\")\n    }\n}\n\n",
         );
 
         source.push_str(
@@ -733,16 +739,21 @@ impl RustStubGenerator {
         match &function.call {
             CallTemplate::Expr(expr) => self.render_expr_invocation(expr, call_args),
             _ => {
-                let fallback = format!(
-                    "{}::{}",
-                    self.dependency.name,
-                    function.name.replace(':', "::")
-                );
-                let rust_path = function
-                    .rust_path
-                    .as_ref()
-                    .map(|path| normalize_rust_path(path))
-                    .unwrap_or_else(|| normalize_rust_path(&fallback));
+                let rust_path = if let Some(path) = &function.rust_path {
+                    path.as_str()
+                } else {
+                    let fallback = format!(
+                        "{}::{}",
+                        self.dependency.name,
+                        function.name.replace(':', "::")
+                    );
+                    return if call_args.is_empty() {
+                        format!("{}()", fallback)
+                    } else {
+                        format!("{}({})", fallback, call_args.join(", "))
+                    };
+                };
+                
                 if call_args.is_empty() {
                     format!("{}()", rust_path)
                 } else {
@@ -776,13 +787,6 @@ impl RustStubGenerator {
     }
 }
 
-fn normalize_rust_path(path: &str) -> String {
-    if path.starts_with("::") {
-        path.to_string()
-    } else {
-        format!("::{path}")
-    }
-}
 
 fn map_rust_type_to_spec(ty: &RustTypeRef) -> Option<TypeSpec> {
     match ty {

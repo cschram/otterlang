@@ -1,10 +1,6 @@
-def ackermann(m: float, n: float) -> float:
-    if m == 0.0:
-        return n + 1.0
-    if n == 0.0:
-        return ackermann(m - 1.0, 1.0)
-    return ackermann(m - 1.0, ackermann(m, n - 1.0))
+use rust:rand
 
 def main():
-    let result = ackermann(2.0, 1.0)
+    let rng = rand.rngs.thread.thread_rng()
+    print("Random number generator created")
 

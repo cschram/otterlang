@@ -56,6 +56,8 @@ pub enum TypeInfo {
     Unknown,
     /// Error type (used for error recovery)
     Error,
+    /// Module type (for FFI modules like `rand`, `chrono`, etc.)
+    Module(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -144,6 +146,7 @@ impl TypeInfo {
                 underlying: Box::new(underlying.substitute(substitutions)),
                 is_public: *is_public,
             },
+            TypeInfo::Module(name) => TypeInfo::Module(name.clone()),
             _ => self.clone(),
         }
     }
@@ -279,6 +282,9 @@ impl TypeInfo {
                     && r1.is_compatible_with(r2)
             }
 
+            // Module types are compatible with themselves
+            (TypeInfo::Module(n1), TypeInfo::Module(n2)) => n1 == n2,
+            
             // Error types are compatible with strings (for convenience) and themselves
             (TypeInfo::Error, TypeInfo::Error) => true,
             (TypeInfo::Str, TypeInfo::Error) => true, // Allow raising strings as errors
@@ -353,6 +359,7 @@ impl TypeInfo {
             TypeInfo::Alias { name, .. } => name.clone(),
             TypeInfo::Unknown => "?".to_string(),
             TypeInfo::Error => "<error>".to_string(),
+            TypeInfo::Module(name) => format!("module<{}>", name),
         }
     }
 }

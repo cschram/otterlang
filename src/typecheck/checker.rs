@@ -1149,13 +1149,25 @@ impl TypeChecker {
                     Literal::Unit => TypeInfo::Unit,
                 }),
                 Expr::Identifier { name, span } => {
-                    self.context.get_variable(name).cloned().ok_or_else(|| {
-                        let err = TypeError::new(format!("undefined variable: {}", name))
+                    if let Some(var_type) = self.context.get_variable(name) {
+                        Ok(var_type.clone())
+                    } else if let Some(registry) = self.registry {
+                        if registry.all().iter().any(|f| f.name.starts_with(&format!("{}.", name))) {
+                            Ok(TypeInfo::Module(name.clone()))
+                        } else {
+                            Err(TypeError::new(format!("undefined variable: {}", name))
+                                .with_hint(format!("did you mean to declare it with `let {}`?", name))
+                                .with_help("Variables must be declared before use".to_string())
+                                .with_optional_span(*span)
+                                .into())
+                        }
+                    } else {
+                        Err(TypeError::new(format!("undefined variable: {}", name))
                             .with_hint(format!("did you mean to declare it with `let {}`?", name))
                             .with_help("Variables must be declared before use".to_string())
-                            .with_optional_span(*span);
-                        anyhow::Error::from(err)
-                    })
+                            .with_optional_span(*span)
+                            .into())
+                    }
                 }
                 Expr::Binary { op, left, right } => {
                     let left_type = self.infer_expr_type(left)?;
@@ -1312,73 +1324,83 @@ impl TypeChecker {
                             })?
                         }
                         Expr::Member { object, field } => {
-                            // Support module.function() syntax for FFI and stdlib calls
-                            if let Expr::Identifier { name: module, .. } = object.as_ref() {
-                                let full_name = format!("{}.{}", module, field);
-                                // First check registry for exact FFI signatures
-                                if let Some(registry) = self.registry {
-                                    if let Some(symbol) = registry.resolve(&full_name) {
-                                        let params: Vec<TypeInfo> = symbol
-                                            .signature
-                                            .params
-                                            .iter()
-                                            .map(|ft| ffi_type_to_typeinfo(ft))
-                                            .collect();
-                                        let return_type = if full_name == "sys.getenv" {
-                                            if let Some(option_enum) = self.context.build_enum_type("Option", vec![TypeInfo::Str]) {
-                                                option_enum
-                                            } else {
-                                                ffi_type_to_typeinfo(&symbol.signature.result)
-                                            }
+                            let full_name = self.build_member_path(object, field);
+                            
+                            // First check registry for exact FFI signatures
+                            if let Some(registry) = self.registry {
+                                if let Some(symbol) = registry.resolve(&full_name) {
+                                    let params: Vec<TypeInfo> = symbol
+                                        .signature
+                                        .params
+                                        .iter()
+                                        .map(|ft| ffi_type_to_typeinfo(ft))
+                                        .collect();
+                                    let return_type = if full_name == "sys.getenv" {
+                                        if let Some(option_enum) = self.context.build_enum_type("Option", vec![TypeInfo::Str]) {
+                                            option_enum
                                         } else {
                                             ffi_type_to_typeinfo(&symbol.signature.result)
-                                        };
-                                        return Ok(TypeInfo::Function {
-                                            params,
-                                            param_defaults: vec![
-                                                false;
-                                                symbol.signature.params.len()
-                                            ],
-                                            return_type: Box::new(return_type),
-                                        });
-                                    }
-                                }
-                                // Fall back to context functions
-                                self.context
-                                    .get_function(&full_name)
-                                    .cloned()
-                                    .unwrap_or_else(|| {
-                                        // Return a generic function type for unknown FFI functions
-                                        // This allows the code to pass type checking
-                                        TypeInfo::Function {
-                                            params: vec![], // Unknown params
-                                            param_defaults: vec![],
-                                            return_type: Box::new(TypeInfo::Unknown),
                                         }
-                                    })
-                            } else {
-                                // Method call: obj.method() - infer object type and look up method
-                                let obj_type = self.infer_expr_type(object)?;
-                                if let TypeInfo::Struct { name, .. } = obj_type {
-                                    let method_name = format!("{}.{}", name, field);
-                                    self.context
-                                        .get_function(&method_name)
-                                        .cloned()
-                                        .unwrap_or_else(|| {
-                                            self.errors.push(TypeError::new(format!(
-                                                "struct '{}' has no method '{}'",
-                                                name, field
-                                            )));
-                                            TypeInfo::Error
-                                        })
-                                } else {
-                                    self.errors.push(TypeError::new(format!(
-                                        "method calls can only be used on struct instances, got {}",
-                                        obj_type.display_name()
-                                    )));
-                                    TypeInfo::Error
+                                    } else {
+                                        ffi_type_to_typeinfo(&symbol.signature.result)
+                                    };
+                                    return Ok(TypeInfo::Function {
+                                        params,
+                                        param_defaults: vec![
+                                            false;
+                                            symbol.signature.params.len()
+                                        ],
+                                        return_type: Box::new(return_type),
+                                    });
+                                }
+                                
+                                // Check if this is a nested module path (e.g., rand.rngs)
+                                if registry.all().iter().any(|f| f.name.starts_with(&format!("{}.", full_name))) {
+                                    return Ok(TypeInfo::Module(full_name));
                                 }
                             }
+                            
+                            // Fall back to context functions
+                            self.context
+                                .get_function(&full_name)
+                                .cloned()
+                                .unwrap_or_else(|| {
+                                    // Check if object is a module type
+                                    if let Ok(obj_type) = self.infer_expr_type(object) {
+                                        if let TypeInfo::Module(_) = obj_type {
+                                            // This is a module member access, return a generic function type
+                                            return TypeInfo::Function {
+                                                params: vec![],
+                                                param_defaults: vec![],
+                                                return_type: Box::new(TypeInfo::Unknown),
+                                            };
+                                        }
+                                    }
+                                    
+                                    // Method call: obj.method() - infer object type and look up method
+                                    if let Ok(obj_type) = self.infer_expr_type(object) {
+                                        if let TypeInfo::Struct { name, .. } = obj_type {
+                                            let method_name = format!("{}.{}", name, field);
+                                            return self.context
+                                                .get_function(&method_name)
+                                                .cloned()
+                                                .unwrap_or_else(|| {
+                                                    self.errors.push(TypeError::new(format!(
+                                                        "struct '{}' has no method '{}'",
+                                                        name, field
+                                                    )));
+                                                    TypeInfo::Error
+                                                });
+                                        }
+                                    }
+                                    
+                                    // Return a generic function type for unknown FFI functions
+                                    TypeInfo::Function {
+                                        params: vec![],
+                                        param_defaults: vec![],
+                                        return_type: Box::new(TypeInfo::Unknown),
+                                    }
+                                })
                         }
                         _ => {
                             self.errors.push(TypeError::new(
@@ -1563,8 +1585,40 @@ impl TypeChecker {
                         }
                     }
 
+                    let full_name = self.build_member_path(object, field);
+                    
+                    // Check if this is a module path in the registry
+                    if let Some(registry) = self.registry {
+                        if registry.all().iter().any(|f| f.name.starts_with(&format!("{}.", full_name))) {
+                            return Ok(TypeInfo::Module(full_name));
+                        }
+                        if let Some(symbol) = registry.resolve(&full_name) {
+                            return Ok(TypeInfo::Function {
+                                params: symbol.signature.params.iter().map(|ft| ffi_type_to_typeinfo(ft)).collect(),
+                                param_defaults: vec![false; symbol.signature.params.len()],
+                                return_type: Box::new(ffi_type_to_typeinfo(&symbol.signature.result)),
+                            });
+                        }
+                    }
+
                     let object_type = self.infer_expr_type(object)?;
                     match &object_type {
+                        TypeInfo::Module(module_name) => {
+                            let full_name = format!("{}.{}", module_name, field);
+                            if let Some(registry) = self.registry {
+                                if registry.all().iter().any(|f| f.name.starts_with(&format!("{}.", full_name))) {
+                                    return Ok(TypeInfo::Module(full_name));
+                                }
+                                if let Some(symbol) = registry.resolve(&full_name) {
+                                    return Ok(TypeInfo::Function {
+                                        params: symbol.signature.params.iter().map(|ft| ffi_type_to_typeinfo(ft)).collect(),
+                                        param_defaults: vec![false; symbol.signature.params.len()],
+                                        return_type: Box::new(ffi_type_to_typeinfo(&symbol.signature.result)),
+                                    });
+                                }
+                            }
+                            Ok(TypeInfo::Module(full_name))
+                        }
                         TypeInfo::Struct { fields, .. } => {
                             if let Some(field_type) = fields.get(field) {
                                 Ok(field_type.clone())
@@ -2084,6 +2138,17 @@ impl TypeChecker {
 
     pub fn into_expr_type_map(self) -> HashMap<usize, TypeInfo> {
         self.expr_types
+    }
+
+    fn build_member_path(&self, object: &Expr, field: &str) -> String {
+        match object {
+            Expr::Identifier { name, .. } => format!("{}.{}", name, field),
+            Expr::Member { object: inner_obj, field: inner_field } => {
+                let prefix = self.build_member_path(inner_obj, inner_field);
+                format!("{}.{}", prefix, field)
+            }
+            _ => format!("unknown.{}", field),
+        }
     }
 }
 

@@ -11,7 +11,10 @@ use crate::codegen::{
     self, build_executable, BuildArtifact, CodegenOptLevel, CodegenOptions, TargetTriple,
 };
 use crate::runtime::ffi;
+use crate::runtime::symbol_registry::SymbolRegistry;
 use crate::typecheck::{self, TypeChecker};
+use ::ffi::{BridgeSymbolRegistry, FunctionSpec, TypeSpec};
+use std::collections::{HashMap, HashSet};
 use crate::version::VERSION;
 use cache::{CacheBuildOptions, CacheEntry, CacheManager, CacheMetadata, CompilationInputs};
 use language::LanguageFeatureFlags;
@@ -309,10 +312,16 @@ pub fn compile_pipeline(
         module_processor.resolve_all_re_exports()
     })?;
 
+    // Register Rust FFI functions for type checking (before type checking)
+    let registry = crate::runtime::symbol_registry::SymbolRegistry::global();
+    profiler.record_phase("Register FFI Functions", || {
+        register_rust_ffi_functions_for_typecheck(&program, registry)
+    })?;
+
     // Type check the program
     let mut type_checker =
         TypeChecker::with_language_features(settings.language_features().clone())
-            .with_registry(crate::runtime::symbol_registry::SymbolRegistry::global());
+            .with_registry(registry);
 
     for module in module_processor.modules() {
         type_checker.register_module_definitions(&module.program);
@@ -831,4 +840,144 @@ fn handle_test(
     }
 
     Ok(())
+}
+
+fn register_rust_ffi_functions_for_typecheck(
+    program: &ast::nodes::Program,
+    registry: &'static SymbolRegistry,
+) -> Result<()> {
+    
+    let imports = collect_rust_imports_for_typecheck(program);
+    if imports.is_empty() {
+        return Ok(());
+    }
+
+    let bridge_registry = BridgeSymbolRegistry::global();
+    
+    for (crate_name, aliases) in imports {
+        let metadata = bridge_registry.ensure_metadata(&crate_name)?;
+        register_bridge_functions_for_typecheck(&crate_name, &aliases, &metadata.functions, registry)?;
+    }
+
+    Ok(())
+}
+
+fn collect_rust_imports_for_typecheck(program: &ast::nodes::Program) -> HashMap<String, HashSet<String>> {
+    use ast::nodes::Statement;
+    let mut imports: HashMap<String, HashSet<String>> = HashMap::new();
+
+    for statement in &program.statements {
+        if let Statement::Use {
+            imports: use_imports,
+        } = statement
+        {
+            for import in use_imports {
+                if let Some((namespace, crate_name)) = import.module.split_once(':') {
+                    if namespace == "rust" {
+                        let aliases = imports.entry(crate_name.to_string()).or_default();
+                        aliases.insert(crate_name.to_string());
+                        if let Some(alias_name) = &import.alias {
+                            aliases.insert(alias_name.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    imports
+}
+
+fn register_bridge_functions_for_typecheck(
+    crate_name: &str,
+    aliases: &HashSet<String>,
+    functions: &[FunctionSpec],
+    registry: &SymbolRegistry,
+) -> Result<()> {
+    use crate::runtime::symbol_registry::{FfiFunction, FfiSignature, FfiType};
+    
+    if functions.is_empty() {
+        return Ok(());
+    }
+
+    for function in functions {
+        let canonical_name = if function.name.contains(':') || function.name.contains('.') {
+            function.name.clone()
+        } else {
+            format!("{crate_name}:{}", function.name)
+        };
+
+        let params = function
+            .params
+            .iter()
+            .enumerate()
+            .map(|(idx, param)| {
+                type_spec_to_ffi_helper(param, "parameter", &canonical_name).with_context(|| {
+                    format!("parameter {idx} in `{canonical_name}` is not FFI compatible")
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        let result = type_spec_to_ffi_helper(&function.result, "return", &canonical_name)?;
+        let signature = FfiSignature::new(params.clone(), result.clone());
+
+        registry.register(FfiFunction {
+            name: canonical_name.clone(),
+            symbol: function.symbol.clone(),
+            signature: signature.clone(),
+        });
+
+        for alias in aliases {
+            let alias_name = alias_name_helper(alias, crate_name, &canonical_name);
+            registry.register(FfiFunction {
+                name: alias_name,
+                symbol: function.symbol.clone(),
+                signature: FfiSignature::new(params.clone(), result.clone()),
+            });
+        }
+    }
+
+    registry.register(FfiFunction {
+        name: format!("{crate_name}.__call_json"),
+        symbol: "otter_call_json".into(),
+        signature: FfiSignature::new(vec![FfiType::Str, FfiType::Str], FfiType::Str),
+    });
+
+    for alias in aliases {
+        registry.register(FfiFunction {
+            name: format!("{alias}.__call_json"),
+            symbol: "otter_call_json".into(),
+            signature: FfiSignature::new(vec![FfiType::Str, FfiType::Str], FfiType::Str),
+        });
+    }
+
+    Ok(())
+}
+
+fn type_spec_to_ffi_helper(spec: &TypeSpec, position: &str, function_name: &str) -> Result<crate::runtime::symbol_registry::FfiType> {
+    use crate::runtime::symbol_registry::FfiType;
+    
+    match spec {
+        TypeSpec::Unit => {
+            if position == "return" {
+                Ok(FfiType::Unit)
+            } else {
+                bail!("`{function_name}` cannot accept a unit value in parameter position")
+            }
+        }
+        TypeSpec::Bool => Ok(FfiType::Bool),
+        TypeSpec::I32 => Ok(FfiType::I32),
+        TypeSpec::I64 => Ok(FfiType::I64),
+        TypeSpec::F64 => Ok(FfiType::F64),
+        TypeSpec::Str => Ok(FfiType::Str),
+        TypeSpec::Opaque => Ok(FfiType::Opaque),
+    }
+}
+
+fn alias_name_helper(alias: &str, crate_name: &str, canonical: &str) -> String {
+    if let Some(rest) = canonical.strip_prefix(&format!("{}:", crate_name)) {
+        format!("{alias}.{rest}")
+    } else {
+        format!("{alias}.{canonical}")
+    }
 }

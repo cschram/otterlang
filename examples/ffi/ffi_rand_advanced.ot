@@ -1,9 +1,10 @@
-def hanoi_towers(n: float, from_rod: float, to_rod: float, aux_rod: float) -> float:
-    if n == 1.0:
-        return 1.0
-    let moves1 = hanoi_towers(n - 1.0, from_rod, aux_rod, to_rod)
-    let moves2 = hanoi_towers(n - 1.0, aux_rod, to_rod, from_rod)
-    return moves1 + 1.0 + moves2
+use rust:rand
 
 def main():
-    let result = hanoi_towers(4.0, 1.0, 3.0, 2.0)
+    let rng = rand.thread_rng()
+    print("Thread RNG created")
+    
+    let sample1 = rand.sample()
+    let sample2 = rand.sample()
+    print("Sample 1 generated")
+    print("Sample 2 generated")

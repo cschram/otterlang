@@ -671,10 +671,6 @@ fn prepare_rust_bridges(program: &Program, registry: &SymbolRegistry) -> Result<
 
     for (crate_name, aliases) in imports {
         let metadata = bridge_registry.ensure_metadata(&crate_name)?;
-        if metadata.functions.is_empty() {
-            continue;
-        }
-
         let artifacts = cargo_bridge.ensure_bridge(&crate_name)?;
         loader.load(&artifacts.library_path).with_context(|| {
             format!("failed to load Rust bridge library for crate `{crate_name}`")
