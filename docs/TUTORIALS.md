@@ -112,10 +112,14 @@ def check_age(age: int):
 ```otter
 def day_name(day: int) -> string:
     return match day:
-        1 => "Monday"
-        2 => "Tuesday"
-        3 => "Wednesday"
-        _ => "Unknown"
+        case 1:
+            "Monday"
+        case 2:
+            "Tuesday"
+        case 3:
+            "Wednesday"
+        case _:
+            "Unknown"
 ```
 
 ### Loops
