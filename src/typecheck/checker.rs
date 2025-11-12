@@ -904,9 +904,30 @@ impl TypeChecker {
     /// Type check a statement
     fn check_statement(&mut self, statement: &Statement) -> Result<()> {
         match statement {
-            Statement::Let { name, expr, .. } => {
+            Statement::Let { name, ty, expr, .. } => {
                 let expr_type = self.infer_expr_type(expr)?;
-                self.context.insert_variable(name.clone(), expr_type);
+                let var_type = match ty {
+                    Some(ty) => {
+                        let t: TypeInfo = ty.into();
+                        if expr_type.is_compatible_with(&t) {
+                            Ok(t)
+                        } else {
+                            Err(TypeError::new(format!(
+                                "cannot assign {} to {}",
+                                expr_type.display_name(),
+                                t.display_name()
+                            ))
+                            .with_hint(format!(
+                                "The variable `{}` is declared as `{}`, but you're trying to assign a value of type `{}`",
+                                name,
+                                t.display_name(),
+                                expr_type.display_name()
+                            )))
+                        }
+                    }
+                    None => Ok(expr_type),
+                }?;
+                self.context.insert_variable(name.clone(), var_type);
             }
             Statement::Assignment { name, expr, span } => {
                 let var_type = self
