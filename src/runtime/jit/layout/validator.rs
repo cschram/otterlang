@@ -8,18 +8,18 @@ pub struct LayoutValidator {
 
 #[derive(Debug, Clone)]
 enum ValidationRule {
-    PreserveSemantics,
-    PreserveSize,
-    PreserveAlignment,
+    Semantics,
+    Size,
+    Alignment,
 }
 
 impl LayoutValidator {
     pub fn new() -> Self {
         Self {
             validation_rules: vec![
-                ValidationRule::PreserveSemantics,
-                ValidationRule::PreserveSize,
-                ValidationRule::PreserveAlignment,
+                ValidationRule::Semantics,
+                ValidationRule::Size,
+                ValidationRule::Alignment,
             ],
         }
     }

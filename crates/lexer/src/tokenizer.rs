@@ -40,7 +40,7 @@ impl LexerError {
             LexerError::TabsNotAllowed { span, .. } => Diagnostic::new(
                 DiagnosticSeverity::Error,
                 source_id,
-                span.clone(),
+                *span,
                 self.to_string(),
             )
             .with_suggestion("Use spaces instead of tabs for indentation")
@@ -55,7 +55,7 @@ impl LexerError {
             } => Diagnostic::new(
                 DiagnosticSeverity::Error,
                 source_id,
-                span.clone(),
+                *span,
                 self.to_string(),
             )
             .with_suggestion(format!("Indent with {} spaces (found {})", expected, found))
@@ -63,7 +63,7 @@ impl LexerError {
             LexerError::UnterminatedString { span, .. } => Diagnostic::new(
                 DiagnosticSeverity::Error,
                 source_id,
-                span.clone(),
+                *span,
                 self.to_string(),
             )
             .with_suggestion("Add a closing quote (\") to terminate the string")
@@ -72,7 +72,7 @@ impl LexerError {
                 let mut diag = Diagnostic::new(
                     DiagnosticSeverity::Error,
                     source_id,
-                    span.clone(),
+                    *span,
                     self.to_string(),
                 );
 
@@ -723,17 +723,17 @@ impl LexerState {
         }
 
         // Parse decimal part
-        if let Some(b'.') = self.current_char() {
-            if let Some(next) = self.peek_char(1) {
-                if next.is_ascii_digit() {
-                    self.advance(1); // Skip decimal point
-                    while let Some(ch) = self.current_char() {
-                        if ch.is_ascii_digit() || ch == b'_' {
-                            self.advance(1);
-                        } else {
-                            break;
-                        }
-                    }
+        if let Some(b'.') = self.current_char()
+            && let Some(next) = self.peek_char(1)
+            && next.is_ascii_digit()
+        {
+            self.advance(1); // Skip decimal point
+
+            while let Some(ch) = self.current_char() {
+                if ch.is_ascii_digit() || ch == b'_' {
+                    self.advance(1);
+                } else {
+                    break;
                 }
             }
         }

@@ -141,6 +141,12 @@ pub extern "C" fn otter_std_time_since(t: u64) -> u64 {
     }
 }
 
+/// gets a time object pointed to by the handle `t` and returns a string of
+/// the time object formatted with `fmt`
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_std_time_format(t: u64, fmt: *const c_char) -> *mut c_char {
     if fmt.is_null() {
@@ -171,6 +177,12 @@ pub unsafe extern "C" fn otter_std_time_format(t: u64, fmt: *const c_char) -> *m
     }
 }
 
+/// attempts to parse a string with the specified format string and returns a
+/// new handle to a NaiveDateTime object
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_std_time_parse(fmt: *const c_char, text: *const c_char) -> u64 {
     if fmt.is_null() || text.is_null() {

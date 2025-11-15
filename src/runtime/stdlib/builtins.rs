@@ -83,11 +83,7 @@ fn map_value(handle: HandleId, key: &str) -> Option<Value> {
 fn stringify_list_handle(handle: HandleId) -> String {
     let lists = LISTS.read();
     if let Some(list) = lists.get(&handle) {
-        let items = list
-            .items
-            .iter()
-            .map(value_to_string)
-            .collect::<Vec<_>>();
+        let items = list.items.iter().map(value_to_string).collect::<Vec<_>>();
         format!("[{}]", items.join(", "))
     } else {
         "[]".to_string()
@@ -134,11 +130,17 @@ thread_local! {
 // len(x) - Get length of string, list, or map
 // ============================================================================
 
+/// get the length of the given string
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_builtin_len_string(s: *const c_char) -> i64 {
     if s.is_null() {
         return 0;
     }
+
     unsafe {
         if let Ok(str_ref) = CStr::from_ptr(s).to_str() {
             str_ref.len() as i64
@@ -182,6 +184,11 @@ pub extern "C" fn otter_builtin_cap_list(handle: u64) -> i64 {
     }
 }
 
+/// get the capacity of the given string
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_builtin_cap_string(s: *const c_char) -> i64 {
     if s.is_null() {
@@ -201,6 +208,11 @@ pub unsafe extern "C" fn otter_builtin_cap_string(s: *const c_char) -> i64 {
 // str.contains(substring) - Check if string contains substring
 // ============================================================================
 
+/// see if a string `s` contains substring `substring`
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_builtin_str_contains(
     s: *const c_char,
@@ -225,6 +237,11 @@ pub unsafe extern "C" fn otter_builtin_str_contains(
 // append(x, val) - Append to a list
 // ============================================================================
 
+/// appends a string to the end of a list
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_builtin_append_list_string(handle: u64, val: *const c_char) -> i32 {
     if val.is_null() {
@@ -301,6 +318,11 @@ pub extern "C" fn otter_builtin_append_list_map(handle: u64, value_handle: u64) 
 // delete(map, key) - Delete a key from a map
 // ============================================================================
 
+/// deletes a key `key` from a map
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_builtin_delete_map(handle: u64, key: *const c_char) -> i32 {
     if key.is_null() {
@@ -423,6 +445,11 @@ pub extern "C" fn otter_builtin_list_get(handle: u64, index: i64) -> *mut c_char
     }
 }
 
+/// get the length of the given string
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_builtin_map_get(handle: u64, key: *const c_char) -> *mut c_char {
     if key.is_null() {
@@ -498,6 +525,11 @@ pub extern "C" fn otter_builtin_list_get_map(handle: u64, index: i64) -> u64 {
     }
 }
 
+/// insert a string key-value pair into a map
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_builtin_map_set(
     handle: u64,
@@ -521,6 +553,11 @@ pub unsafe extern "C" fn otter_builtin_map_set(
     }
 }
 
+/// retrieves a key `key` from the map pointed to by `handle` and attempts a cast to an i64
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_builtin_map_get_int(handle: u64, key: *const c_char) -> i64 {
     if key.is_null() {
@@ -541,6 +578,11 @@ pub unsafe extern "C" fn otter_builtin_map_get_int(handle: u64, key: *const c_ch
     }
 }
 
+/// retrieves a key `key` from the map pointed to by `handle` and attempts a cast to an f64
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_builtin_map_get_float(handle: u64, key: *const c_char) -> f64 {
     if key.is_null() {
@@ -561,6 +603,11 @@ pub unsafe extern "C" fn otter_builtin_map_get_float(handle: u64, key: *const c_
     }
 }
 
+/// retrieves a key `key` from the map pointed to by `handle` and attempts a cast to a bool
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_builtin_map_get_bool(handle: u64, key: *const c_char) -> bool {
     if key.is_null() {
@@ -575,6 +622,12 @@ pub unsafe extern "C" fn otter_builtin_map_get_bool(handle: u64, key: *const c_c
     }
 }
 
+/// retrieves a key `key` from the map pointed to by `handle` and attempts to
+/// convert the value to a handle to a list
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_builtin_map_get_list(handle: u64, key: *const c_char) -> u64 {
     if key.is_null() {
@@ -587,6 +640,12 @@ pub unsafe extern "C" fn otter_builtin_map_get_list(handle: u64, key: *const c_c
     }
 }
 
+/// retrieves a key `key` from the map pointed to by `handle` and attempts to
+/// convert the value to a handle to a map
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_builtin_map_get_map(handle: u64, key: *const c_char) -> u64 {
     if key.is_null() {
@@ -599,6 +658,12 @@ pub unsafe extern "C" fn otter_builtin_map_get_map(handle: u64, key: *const c_ch
     }
 }
 
+/// retrieves a key `key` from the map pointed to by `handle` and sets the
+/// current value to the new value `value`
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_builtin_map_set_int(
     handle: u64,
@@ -620,6 +685,12 @@ pub unsafe extern "C" fn otter_builtin_map_set_int(
     }
 }
 
+/// retrieves a key `key` from the map pointed to by `handle` and sets the
+/// current value to the new value `value`
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_builtin_map_set_float(
     handle: u64,
@@ -641,6 +712,12 @@ pub unsafe extern "C" fn otter_builtin_map_set_float(
     }
 }
 
+/// retrieves a key `key` from the map pointed to by `handle` and sets the
+/// current value to the new value `value`
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_builtin_map_set_bool(
     handle: u64,
@@ -662,6 +739,12 @@ pub unsafe extern "C" fn otter_builtin_map_set_bool(
     }
 }
 
+/// retrieves a key `key` from the map pointed to by `handle` and sets the
+/// current value to the new value `value_handle`
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_builtin_map_set_list(
     handle: u64,
@@ -683,6 +766,12 @@ pub unsafe extern "C" fn otter_builtin_map_set_list(
     }
 }
 
+/// retrieves a key `key` from the map pointed to by `handle` and sets the
+/// current value to the new value `value_handle`
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_builtin_map_set_map(
     handle: u64,
@@ -708,6 +797,11 @@ pub unsafe extern "C" fn otter_builtin_map_set_map(
 // panic(msg) - Terminate execution with error message
 // ============================================================================
 
+/// otter-lang's builtin panic function
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_builtin_panic(msg: *const c_char) {
     let message = if msg.is_null() {
@@ -1018,6 +1112,11 @@ pub extern "C" fn otter_builtin_stringify_bool(value: bool) -> *mut c_char {
         .unwrap_or(std::ptr::null_mut())
 }
 
+/// Converts an instance of `Cstr` into `CString`
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_builtin_stringify_string(s: *const c_char) -> *mut c_char {
     if s.is_null() {
@@ -1039,11 +1138,7 @@ pub unsafe extern "C" fn otter_builtin_stringify_string(s: *const c_char) -> *mu
 pub extern "C" fn otter_builtin_stringify_list(handle: u64) -> *mut c_char {
     let lists = LISTS.read();
     if let Some(list) = lists.get(&handle) {
-        let items: Vec<String> = list
-            .items
-            .iter()
-            .map(value_to_string)
-            .collect();
+        let items: Vec<String> = list.items.iter().map(value_to_string).collect();
         let json = format!("[{}]", items.join(", "));
         CString::new(json)
             .ok()
@@ -1091,6 +1186,11 @@ pub struct SelectCase {
     value: *const c_char, // For send operations
 }
 
+/// Creates a new instance of `SelectCase`
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_builtin_select_case_create(
     channel: u64,
@@ -1105,6 +1205,11 @@ pub unsafe extern "C" fn otter_builtin_select_case_create(
     Box::into_raw(case)
 }
 
+/// frees an instance of `SelectCase`
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_builtin_select_case_free(case: *mut SelectCase) {
     if !case.is_null() {
@@ -1112,10 +1217,17 @@ pub unsafe extern "C" fn otter_builtin_select_case_free(case: *mut SelectCase) {
         // `SelectCase` is
         //  * Only freed by this function;
         //  * only created using the global allocator;
-        unsafe { Box::from_raw(case) };
+        unsafe { drop(Box::from_raw(case)) };
     }
 }
 
+/// Iterates through all cases pointed to by `cases`, if the case is send, we
+/// send data to it, otherwise, try to receive data from it
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
+/// caller must guarantee that `num_cases` is valid within the span `cases`
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_builtin_select(
     cases: *const SelectCase,

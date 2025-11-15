@@ -1,10 +1,9 @@
 pub mod discovery;
+pub mod reporter;
 pub mod runner;
 pub mod snapshot;
-pub mod reporter;
 
-pub use discovery::{TestDiscovery, TestCase};
+pub use discovery::{TestCase, TestDiscovery};
+pub use reporter::{TestReporter, TestResult};
 pub use runner::TestRunner;
 pub use snapshot::SnapshotManager;
-pub use reporter::{TestReporter, TestResult};
-

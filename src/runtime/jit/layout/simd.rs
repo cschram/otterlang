@@ -27,10 +27,7 @@ impl SimdOpportunityDetector {
 
         for pattern in patterns {
             if let Some(struct_id) = pattern.struct_id {
-                struct_patterns
-                    .entry(struct_id)
-                    .or_default()
-                    .push(pattern);
+                struct_patterns.entry(struct_id).or_default().push(pattern);
             }
         }
 
@@ -160,13 +157,14 @@ impl SimdOpportunityDetector {
 
         for pattern in patterns {
             if let Some(field_id) = pattern.field_id
-                && vectorizable_fields.contains(&field_id) {
-                    total_field_accesses += 1;
-                    // Check if address is aligned to SIMD width
-                    if pattern.address % (self.simd_width / 8) == 0 {
-                        aligned_accesses += 1;
-                    }
+                && vectorizable_fields.contains(&field_id)
+            {
+                total_field_accesses += 1;
+                // Check if address is aligned to SIMD width
+                if pattern.address % (self.simd_width / 8) == 0 {
+                    aligned_accesses += 1;
                 }
+            }
         }
 
         if total_field_accesses == 0 {

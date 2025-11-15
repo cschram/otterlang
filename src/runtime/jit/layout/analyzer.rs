@@ -38,10 +38,7 @@ impl CacheLocalityAnalyzer {
         let mut struct_patterns: HashMap<StructId, Vec<&AccessPattern>> = HashMap::new();
         for pattern in patterns {
             if let Some(struct_id) = pattern.struct_id {
-                struct_patterns
-                    .entry(struct_id)
-                    .or_default()
-                    .push(pattern);
+                struct_patterns.entry(struct_id).or_default().push(pattern);
             }
         }
 

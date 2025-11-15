@@ -16,30 +16,33 @@ pub use thread_pool::AdaptiveThreadPool;
 pub use workload_analyzer::WorkloadAnalyzer;
 
 use parking_lot::RwLock;
+use std::rc::Rc;
 use std::sync::Arc;
 
 /// Main concurrency manager that coordinates all subsystems
 pub struct ConcurrencyManager {
-    scheduler: Arc<RwLock<UnifiedScheduler>>,
+    scheduler: Rc<RwLock<UnifiedScheduler>>,
     thread_pool: Arc<AdaptiveThreadPool>,
     monitor: Arc<RwLock<SystemMonitor>>,
     #[allow(dead_code)]
     analyzer: Arc<RwLock<WorkloadAnalyzer>>,
-    rebalancer: Arc<RwLock<Rebalancer>>,
+    rebalancer: RwLock<Rebalancer>,
 }
 
 impl ConcurrencyManager {
     pub fn new() -> Result<Self, String> {
         let monitor = Arc::new(RwLock::new(SystemMonitor::new()?));
         let thread_pool = Arc::new(AdaptiveThreadPool::new()?);
-        let scheduler = Arc::new(RwLock::new(UnifiedScheduler::new(thread_pool.clone())?));
         let analyzer = Arc::new(RwLock::new(WorkloadAnalyzer::new()));
-        let rebalancer = Arc::new(RwLock::new(Rebalancer::new(
+
+        let scheduler = Rc::new(RwLock::new(UnifiedScheduler::new(thread_pool.clone())?));
+
+        let rebalancer = RwLock::new(Rebalancer::new(
             scheduler.clone(),
             thread_pool.clone(),
             monitor.clone(),
             analyzer.clone(),
-        )));
+        ));
 
         Ok(Self {
             scheduler,

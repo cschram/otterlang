@@ -1,9 +1,10 @@
 use std::collections::HashMap;
+use std::ops::Deref;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use libloading::{Library, Symbol};
+use libloading::Library;
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 
@@ -20,9 +21,13 @@ impl DynamicLibrary {
             inner: Arc::new(library),
         }
     }
+}
 
-    pub unsafe fn get<T>(&self, symbol: &[u8]) -> Result<Symbol<'_, T>> {
-        unsafe { self.inner.get(symbol) }.map_err(|err| err.into())
+impl Deref for DynamicLibrary {
+    type Target = Library;
+
+    fn deref(&self) -> &Self::Target {
+        self.inner.as_ref()
     }
 }
 
@@ -31,11 +36,17 @@ pub struct DynamicLibraryLoader {
     cache: Mutex<HashMap<PathBuf, DynamicLibrary>>,
 }
 
-impl DynamicLibraryLoader {
-    pub fn new() -> Self {
+impl Default for DynamicLibraryLoader {
+    fn default() -> Self {
         Self {
             cache: Mutex::new(HashMap::new()),
         }
+    }
+}
+
+impl DynamicLibraryLoader {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn global() -> &'static Self {

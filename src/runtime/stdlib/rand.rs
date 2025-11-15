@@ -47,7 +47,7 @@ pub extern "C" fn otter_std_rand_int(min: i64, max: i64) -> i64 {
     }
 
     let range = (max - min) as u64;
-    
+
     min + (next % range) as i64
 }
 

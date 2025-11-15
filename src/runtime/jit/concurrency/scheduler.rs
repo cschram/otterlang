@@ -1,7 +1,7 @@
 use parking_lot::RwLock;
 use std::future::Future;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{mpsc, Arc};
+use std::sync::{Arc, mpsc};
 use std::task::{Context, Poll, Waker};
 
 use super::task::{Task, TaskHandle, TaskKind};
@@ -9,7 +9,7 @@ use super::thread_pool::AdaptiveThreadPool;
 
 /// Unified scheduler that merges async tasks and thread-pool workers
 pub struct UnifiedScheduler {
-    task_queue: Arc<RwLock<mpsc::Receiver<Task>>>,
+    task_queue: RwLock<mpsc::Receiver<Task>>,
     task_sender: mpsc::Sender<Task>,
     thread_pool: Arc<AdaptiveThreadPool>,
     pending_count: Arc<AtomicU64>,
@@ -24,7 +24,7 @@ impl UnifiedScheduler {
         let (sender, receiver) = mpsc::channel();
 
         Ok(Self {
-            task_queue: Arc::new(RwLock::new(receiver)),
+            task_queue: RwLock::new(receiver),
             task_sender: sender,
             thread_pool,
             pending_count: Arc::new(AtomicU64::new(0)),
@@ -181,9 +181,11 @@ fn create_waker(
         // Wake logic would go here
     }
 
-    unsafe fn wake_by_ref_waker(data: *const ()) { unsafe {
-        wake_waker(data);
-    }}
+    unsafe fn wake_by_ref_waker(data: *const ()) {
+        unsafe {
+            wake_waker(data);
+        }
+    }
 
     unsafe fn drop_waker(_data: *const ()) {}
 

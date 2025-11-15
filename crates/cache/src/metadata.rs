@@ -41,8 +41,9 @@ impl CacheMetadata {
         }
     }
 
-    pub fn with_llvm_version(&mut self, version: String) {
+    pub fn with_llvm_version(&mut self, version: String) -> Self {
         self.llvm_version = Some(version);
+        self.clone()
     }
 
     pub fn binary_size(&self) -> u64 {

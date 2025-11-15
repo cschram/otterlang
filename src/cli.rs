@@ -3,25 +3,25 @@ use std::path::{Path, PathBuf};
 use std::process::Command as ProcessCommand;
 use std::time::Duration;
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use tracing::{debug, info, warn};
 
 use crate::codegen::{
-    self, build_executable, BuildArtifact, CodegenOptLevel, CodegenOptions, TargetTriple,
+    self, BuildArtifact, CodegenOptLevel, CodegenOptions, TargetTriple, build_executable,
 };
 use crate::runtime::ffi;
 use crate::runtime::symbol_registry::SymbolRegistry;
 use crate::typecheck::{self, TypeChecker};
-use ::ffi::{BridgeSymbolRegistry, FunctionSpec, TypeSpec};
-use std::collections::{HashMap, HashSet};
 use crate::version::VERSION;
+use ::ffi::{BridgeSymbolRegistry, FunctionSpec, TypeSpec};
 use cache::{CacheBuildOptions, CacheEntry, CacheManager, CacheMetadata, CompilationInputs};
 use language::LanguageFeatureFlags;
-use lexer::{tokenize, LexerError};
+use lexer::{LexerError, tokenize};
 use module::ModuleProcessor;
-use parser::{parse, ParserError};
-use utils::errors::{emit_diagnostics, Diagnostic};
+use parser::{ParserError, parse};
+use std::collections::{HashMap, HashSet};
+use utils::errors::{Diagnostic, emit_diagnostics};
 use utils::logger;
 use utils::profiler::{PhaseTiming, Profiler};
 
@@ -163,10 +163,11 @@ fn handle_run(cli: &OtterCli, path: &Path) -> Result<()> {
             println!("building {}", artifact.binary.display());
             execute_binary(&artifact.binary, &settings)?;
             if settings.dump_ir
-                && let Some(ir) = &artifact.ir {
-                    println!("\n== LLVM IR ==");
-                    println!("{ir}");
-                }
+                && let Some(ir) = &artifact.ir
+            {
+                println!("\n== LLVM IR ==");
+                println!("{ir}");
+            }
             if settings.profile {
                 print_profile(metadata);
             }
@@ -209,10 +210,11 @@ fn handle_build(cli: &OtterCli, path: &Path, output: Option<PathBuf>) -> Result<
     match &stage.result {
         CompilationResult::Compiled { artifact, metadata } => {
             if settings.dump_ir
-                && let Some(ir) = &artifact.ir {
-                    println!("\n== LLVM IR ==");
-                    println!("{ir}");
-                }
+                && let Some(ir) = &artifact.ir
+            {
+                println!("\n== LLVM IR ==");
+                println!("{ir}");
+            }
             if settings.profile {
                 print_profile(metadata);
             }
@@ -256,14 +258,14 @@ pub fn compile_pipeline(
     if settings.allow_cache()
         && let Some(entry) =
             profiler.record_phase("Cache lookup", || cache_manager.lookup(&initial_cache_key))
-        {
-            debug!(cache_hit = %entry.binary_path.display());
-            profiler.push_phase("Compile skipped", Duration::from_millis(0));
-            return Ok(CompilationStage {
-                profiler,
-                result: CompilationResult::CacheHit(entry),
-            });
-        }
+    {
+        debug!(cache_hit = %entry.binary_path.display());
+        profiler.push_phase("Compile skipped", Duration::from_millis(0));
+        return Ok(CompilationStage {
+            profiler,
+            result: CompilationResult::CacheHit(entry),
+        });
+    }
 
     let tokens = match profiler.record_phase("Lexing", || tokenize(source)) {
         Ok(tokens) => tokens,
@@ -348,14 +350,15 @@ pub fn compile_pipeline(
     if settings.allow_cache()
         && let Some(entry) = profiler.record_phase("Cache lookup (with modules)", || {
             cache_manager.lookup(&cache_key)
-        }) {
-            debug!(cache_hit = %entry.binary_path.display());
-            profiler.push_phase("Compile skipped", Duration::from_millis(0));
-            return Ok(CompilationStage {
-                profiler,
-                result: CompilationResult::CacheHit(entry),
-            });
-        }
+        })
+    {
+        debug!(cache_hit = %entry.binary_path.display());
+        profiler.push_phase("Compile skipped", Duration::from_millis(0));
+        return Ok(CompilationStage {
+            profiler,
+            result: CompilationResult::CacheHit(entry),
+        });
+    }
 
     let codegen_options = settings.codegen_options();
     let binary_path = cache_manager
@@ -376,16 +379,14 @@ pub fn compile_pipeline(
 
     let metadata = CacheMetadata::new(
         cache_key.clone(),
-        VERSION,
-        codegen::current_llvm_version(),
         canonical_or(path),
         inputs.dependencies.clone(),
         artifact.binary.clone(),
         binary_size,
         build_duration_ms as u64,
         PathBuf::from("./cache"), // cache_path
-        inputs.imports.clone(),
-    );
+    )
+    .with_llvm_version(codegen::current_llvm_version());
 
     if let Err(e) = cache_manager.store(&metadata) {
         warn!("Failed to store cache entry: {}", e);
@@ -587,16 +588,17 @@ fn find_stdlib_dir() -> Result<PathBuf> {
 
     // Try relative to executable (for development)
     if let Ok(exe) = std::env::current_exe()
-        && let Some(exe_dir) = exe.parent() {
-            let stdlib = exe_dir
-                .parent()
-                .unwrap_or(exe_dir)
-                .join("stdlib")
-                .join("otter");
-            if stdlib.exists() {
-                return Ok(stdlib);
-            }
+        && let Some(exe_dir) = exe.parent()
+    {
+        let stdlib = exe_dir
+            .parent()
+            .unwrap_or(exe_dir)
+            .join("stdlib")
+            .join("otter");
+        if stdlib.exists() {
+            return Ok(stdlib);
         }
+    }
 
     // Try relative to current directory (for development)
     let stdlib = PathBuf::from("stdlib").join("otter");
@@ -604,7 +606,9 @@ fn find_stdlib_dir() -> Result<PathBuf> {
         return Ok(stdlib);
     }
 
-    bail!("stdlib directory not found. Set OTTER_STDLIB_DIR environment variable or ensure stdlib/otter exists")
+    bail!(
+        "stdlib directory not found. Set OTTER_STDLIB_DIR environment variable or ensure stdlib/otter exists"
+    )
 }
 
 fn execute_binary(path: &Path, settings: &CompilationSettings) -> Result<()> {
@@ -740,9 +744,9 @@ fn handle_repl() -> Result<()> {
         Err(e) => {
             eprintln!("Failed to initialize TUI: {}", e);
             eprintln!("Error chain: {:?}", e);
-            Err(e).with_context(|| {
-                "Failed to initialize TUI. Make sure you're running in a terminal."
-            })
+            Err(e).with_context(
+                || "Failed to initialize TUI. Make sure you're running in a terminal.",
+            )
         }
     }
 }
@@ -782,15 +786,15 @@ fn handle_test(
     verbose: bool,
     update_snapshots: bool,
 ) -> Result<()> {
-    use crate::test::{TestDiscovery, TestRunner, TestReporter};
+    use crate::test::{TestDiscovery, TestReporter, TestRunner};
     use rayon::prelude::*;
 
     let settings = CompilationSettings::from_cli(cli);
     let mut discovery = TestDiscovery::new();
     discovery.discover_files(paths)?;
-    
+
     let tests = discovery.discover_all_tests()?;
-    
+
     if tests.is_empty() {
         println!("No tests found");
         return Ok(());
@@ -837,23 +841,29 @@ fn register_rust_ffi_functions_for_typecheck(
     program: &ast::nodes::Program,
     registry: &'static SymbolRegistry,
 ) -> Result<()> {
-    
     let imports = collect_rust_imports_for_typecheck(program);
     if imports.is_empty() {
         return Ok(());
     }
 
     let bridge_registry = BridgeSymbolRegistry::global();
-    
+
     for (crate_name, aliases) in imports {
         let metadata = bridge_registry.ensure_metadata(&crate_name)?;
-        register_bridge_functions_for_typecheck(&crate_name, &aliases, &metadata.functions, registry)?;
+        register_bridge_functions_for_typecheck(
+            &crate_name,
+            &aliases,
+            &metadata.functions,
+            registry,
+        )?;
     }
 
     Ok(())
 }
 
-fn collect_rust_imports_for_typecheck(program: &ast::nodes::Program) -> HashMap<String, HashSet<String>> {
+fn collect_rust_imports_for_typecheck(
+    program: &ast::nodes::Program,
+) -> HashMap<String, HashSet<String>> {
     use ast::nodes::Statement;
     let mut imports: HashMap<String, HashSet<String>> = HashMap::new();
 
@@ -864,13 +874,14 @@ fn collect_rust_imports_for_typecheck(program: &ast::nodes::Program) -> HashMap<
         {
             for import in use_imports {
                 if let Some((namespace, crate_name)) = import.module.split_once(':')
-                    && namespace == "rust" {
-                        let aliases = imports.entry(crate_name.to_string()).or_default();
-                        aliases.insert(crate_name.to_string());
-                        if let Some(alias_name) = &import.alias {
-                            aliases.insert(alias_name.clone());
-                        }
+                    && namespace == "rust"
+                {
+                    let aliases = imports.entry(crate_name.to_string()).or_default();
+                    aliases.insert(crate_name.to_string());
+                    if let Some(alias_name) = &import.alias {
+                        aliases.insert(alias_name.clone());
                     }
+                }
             }
         }
     }
@@ -885,7 +896,7 @@ fn register_bridge_functions_for_typecheck(
     registry: &SymbolRegistry,
 ) -> Result<()> {
     use crate::runtime::symbol_registry::{FfiFunction, FfiSignature, FfiType};
-    
+
     if functions.is_empty() {
         return Ok(());
     }
@@ -944,9 +955,13 @@ fn register_bridge_functions_for_typecheck(
     Ok(())
 }
 
-fn type_spec_to_ffi_helper(spec: &TypeSpec, position: &str, function_name: &str) -> Result<crate::runtime::symbol_registry::FfiType> {
+fn type_spec_to_ffi_helper(
+    spec: &TypeSpec,
+    position: &str,
+    function_name: &str,
+) -> Result<crate::runtime::symbol_registry::FfiType> {
     use crate::runtime::symbol_registry::FfiType;
-    
+
     match spec {
         TypeSpec::Unit => {
             if position == "return" {

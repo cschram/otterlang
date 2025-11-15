@@ -2,15 +2,15 @@ use anyhow::{Context, Result};
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use crossterm::execute;
 use crossterm::terminal::{
-    disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
+    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
-use ratatui::backend::CrosstermBackend;
 use ratatui::Terminal;
+use ratatui::backend::CrosstermBackend;
 use std::io::{self, Stdout};
 use std::time::Duration;
 
 use crate::repl::engine::ReplEngine;
-use crate::repl::events::{is_ctrl, matches_key, AppEvent, EventHandler};
+use crate::repl::events::{AppEvent, EventHandler, is_ctrl, matches_key};
 use crate::repl::state::{AppState, Mode, OutputKind};
 use crate::repl::ui::draw_ui;
 

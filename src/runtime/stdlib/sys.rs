@@ -25,6 +25,11 @@ pub extern "C" fn otter_std_sys_available_memory_bytes() -> i64 {
     (system.available_memory() * 1024) as i64
 }
 
+/// get the env variable `name`
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_std_sys_getenv(name: *const c_char) -> *mut c_char {
     if name.is_null() {

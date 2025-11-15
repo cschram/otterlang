@@ -6,17 +6,17 @@
 mod channel;
 mod metrics;
 mod scheduler;
-mod task;
+mod task_impl;
 mod timer;
 mod tls;
 
-pub use channel::{select2, select2_async, SelectResult, TaskChannel, TaskMailBox};
+pub use channel::{SelectResult, TaskChannel, TaskMailBox, select2, select2_async};
 pub use metrics::{TaskMetricsSnapshot, TaskRuntimeMetrics, WorkerInfo, WorkerState};
 pub use scheduler::{SchedulerConfig, TaskScheduler};
-pub use task::{CancellationToken, JoinFuture, JoinHandle, Task, TaskFn, TaskId, TaskState};
+pub use task_impl::{CancellationToken, JoinFuture, JoinHandle, Task, TaskFn, TaskId, TaskState};
 pub use timer::TimerWheel;
 pub use tls::{
-    cleanup_task_local_storage, get_task_local_storage, TaskLocalRegistry, TaskLocalStorage,
+    TaskLocalRegistry, TaskLocalStorage, cleanup_task_local_storage, get_task_local_storage,
 };
 
 use std::sync::Once;

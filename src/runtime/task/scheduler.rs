@@ -1,12 +1,12 @@
 use crossbeam_deque::{Injector, Steal, Stealer, Worker};
 use crossbeam_utils::Backoff;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::thread;
 use std::time::Duration;
 
 use super::metrics::{TaskRuntimeMetrics, WorkerState};
-use super::task::{JoinHandle, Task, TaskFn};
+use super::task_impl::{JoinHandle, Task, TaskFn};
 use super::timer::TimerWheel;
 use super::tls::cleanup_task_local_storage;
 

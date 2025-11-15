@@ -1,7 +1,7 @@
+use anyhow::{Context, Result};
 use std::path::Path;
 use std::process::Command;
 use std::time::Instant;
-use anyhow::{Context, Result};
 
 use crate::cli::CompilationSettings;
 use crate::test::{TestCase, TestResult};
@@ -21,7 +21,7 @@ impl TestRunner {
 
     pub fn run_test(&self, test: &TestCase) -> TestResult {
         let start = Instant::now();
-        
+
         let compile_result = self.compile_test_file(&test.file_path);
         if let Err(e) = compile_result {
             return TestResult::Failed {
@@ -61,7 +61,10 @@ impl TestRunner {
                     }
                 } else {
                     TestResult::Failed {
-                        error: format!("Test failed with exit code {}", output.status.code().unwrap_or(-1)),
+                        error: format!(
+                            "Test failed with exit code {}",
+                            output.status.code().unwrap_or(-1)
+                        ),
                         duration,
                         output: combined_output,
                         span: Some((test.line_number, test.line_number)),
@@ -79,7 +82,7 @@ impl TestRunner {
 
     fn compile_test_file(&self, file_path: &Path) -> Result<std::path::PathBuf> {
         use crate::cli::{compile_pipeline, read_source};
-        
+
         let source = read_source(file_path)?;
         let stage = compile_pipeline(file_path, &source, &self.settings)
             .with_context(|| format!("failed to compile test file {}", file_path.display()))?;
@@ -92,4 +95,3 @@ impl TestRunner {
         Ok(binary_path)
     }
 }
-

@@ -387,11 +387,17 @@ impl From<&Type> for TypeInfo {
             },
             Type::Generic { base, args } => match base.as_str() {
                 "List" | "list" => {
-                    let element = args.first().map(TypeInfo::from).unwrap_or(TypeInfo::Unknown);
+                    let element = args
+                        .first()
+                        .map(TypeInfo::from)
+                        .unwrap_or(TypeInfo::Unknown);
                     TypeInfo::List(Box::new(element))
                 }
                 "Dict" | "dict" => {
-                    let key = args.first().map(TypeInfo::from).unwrap_or(TypeInfo::Unknown);
+                    let key = args
+                        .first()
+                        .map(TypeInfo::from)
+                        .unwrap_or(TypeInfo::Unknown);
                     let value = args.get(1).map(TypeInfo::from).unwrap_or(TypeInfo::Unknown);
                     TypeInfo::Dict {
                         key: Box::new(key),
@@ -602,9 +608,10 @@ impl TypeContext {
             vec![TypeInfo::Unknown; definition.generics.len()]
         } else if args.len() < definition.generics.len() {
             let mut padded = args;
-            padded.extend(
-                std::iter::repeat_n(TypeInfo::Unknown, definition.generics.len() - padded.len()),
-            );
+            padded.extend(std::iter::repeat_n(
+                TypeInfo::Unknown,
+                definition.generics.len() - padded.len(),
+            ));
             padded
         } else {
             args
@@ -667,9 +674,10 @@ impl TypeContext {
         let mut info = TypeInfo::from(ty);
         if let TypeInfo::Generic { base, args } = &info
             && args.is_empty()
-                && let Some(aliased_type) = self.resolve_type_alias(base) {
-                    info = aliased_type.clone();
-                }
+            && let Some(aliased_type) = self.resolve_type_alias(base)
+        {
+            info = aliased_type.clone();
+        }
         self.normalize_type(info)
     }
 

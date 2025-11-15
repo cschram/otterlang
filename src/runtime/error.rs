@@ -78,7 +78,6 @@ impl ErrorStack {
         // For now, we only support one level of error context
         // In a more advanced implementation, this could be a stack
         Self::CURRENT_ERROR.with(|error| {
-            
             // Don't overwrite existing errors
             error.borrow().is_some()
         })
@@ -136,7 +135,6 @@ impl ErrorStack {
 
 /// C-facing API functions for error handling
 /// These functions provide a stable C ABI for LLVM-generated code
-
 #[unsafe(no_mangle)]
 pub extern "C" fn otter_error_push_context() -> bool {
     ErrorStack::push_context()

@@ -1,3 +1,3 @@
 pub use crate::runtime::symbol_registry::{
-    FfiFunction, FfiSignature, FfiType, SymbolRegistry, GLOBAL_SYMBOL_REGISTRY,
+    FfiFunction, FfiSignature, FfiType, GLOBAL_SYMBOL_REGISTRY, SymbolRegistry,
 };

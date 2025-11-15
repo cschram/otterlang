@@ -310,7 +310,7 @@ impl Formatter {
 
     fn format_if(
         &self,
-        cond: &Box<Expr>,
+        cond: &Expr,
         then_block: &Block,
         elif_blocks: &[(Expr, Block)],
         else_block: &Option<Block>,

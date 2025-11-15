@@ -8,7 +8,7 @@ use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use super::task::TaskId;
+use super::task_impl::TaskId;
 
 /// Task-local storage container.
 #[derive(Debug, Clone)]
@@ -30,9 +30,9 @@ impl TaskLocalStorage {
     }
 
     /// Get a value from task-local storage.
-    pub fn get<T: Send + Sync + 'static>(&self) -> Option<T>
+    pub fn get<T>(&self) -> Option<T>
     where
-        T: Clone,
+        T: Clone + Send + Sync + 'static,
     {
         let storage = self.storage.lock();
         storage
@@ -42,11 +42,9 @@ impl TaskLocalStorage {
     }
 
     /// Get a reference to a value in task-local storage (without cloning).
-    pub fn get_ref<T: Send + Sync + 'static>(
-        &self,
-    ) -> Option<std::sync::LockResult<parking_lot::MutexGuard<'_, T>>>
+    pub fn get_ref<T>(&self) -> Option<std::sync::LockResult<parking_lot::MutexGuard<'_, T>>>
     where
-        T: 'static,
+        T: 'static + Send + Sync,
     {
         // For non-cloneable types, we wrap them in Mutex
         // This is a simplified version - in practice you'd want more sophisticated handling
@@ -97,10 +95,7 @@ impl TaskLocalRegistry {
     /// Get or create task-local storage for a task.
     pub fn get_or_create(&self, task_id: TaskId) -> TaskLocalStorage {
         let mut registry = self.registry.lock();
-        registry
-            .entry(task_id)
-            .or_default()
-            .clone()
+        registry.entry(task_id).or_default().clone()
     }
 
     /// Get task-local storage for a task, if it exists.

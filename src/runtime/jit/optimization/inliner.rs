@@ -66,11 +66,11 @@ impl Inliner {
     ) {
         // Implementation would traverse AST and replace parameter references
         // This is a placeholder for the full implementation
-        if let Statement::Expr(Expr::Identifier { name, .. }) = stmt {
-            if let Some((idx, _)) = params.iter().enumerate().find(|(_, p)| p.name == *name)
-                && idx < args.len() {
-                    // This is simplified - would need proper expression replacement
-                }
+        if let Statement::Expr(Expr::Identifier { name, .. }) = stmt
+            && let Some((idx, _)) = params.iter().enumerate().find(|(_, p)| p.name == *name)
+            && idx < args.len()
+        {
+            // This is simplified - would need proper expression replacement
         }
     }
 

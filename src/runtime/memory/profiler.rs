@@ -1,8 +1,8 @@
 //! Memory profiling and allocation tracking
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Instant;
 
 use parking_lot::RwLock;
@@ -175,7 +175,7 @@ impl MemoryProfiler {
             size_histogram,
             top_allocators: {
                 let mut v: Vec<_> = function_allocations.into_iter().collect();
-                v.sort_by(|a, b| b.1 .0.cmp(&a.1 .0));
+                v.sort_by(|a, b| b.1.0.cmp(&a.1.0));
                 v.into_iter().take(10).collect()
             },
         }

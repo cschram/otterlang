@@ -60,10 +60,10 @@ impl ModulePath {
                 bail!("Rust modules should be handled via FFI system")
             }
             ModulePath::Unqualified(name) => {
-                if let Some(stdlib) = stdlib_dir {
-                    if let Some(path) = Self::resolve_stdlib_path(stdlib, name)? {
-                        return Ok(path);
-                    }
+                if let Some(stdlib) = stdlib_dir
+                    && let Some(path) = Self::resolve_stdlib_path(stdlib, name)?
+                {
+                    return Ok(path);
                 }
                 let relative = Self::module_name_to_path(name);
                 Self::resolve_relative_path(source_dir, &relative)
@@ -101,7 +101,7 @@ impl ModulePath {
             path = path.join("mod.ot");
         } else {
             // Append .ot if no extension yet
-            if !path.extension().map_or(false, |ext| ext == "ot") {
+            if !path.extension().map_or_else(|| false, |ext| ext == "ot") {
                 path.set_extension("ot");
             }
         }
@@ -129,7 +129,7 @@ impl ModulePath {
             path = path.join("mod.ot");
         }
 
-        if !path.exists() && !path.extension().map_or(false, |ext| ext == "ot") {
+        if !path.exists() && !path.extension().map_or_else(|| false, |ext| ext == "ot") {
             path.set_extension("ot");
         }
 
@@ -157,10 +157,7 @@ impl DependencyGraph {
 
     /// Add a dependency edge from `from` to `to`
     pub fn add_dependency(&mut self, from: PathBuf, to: PathBuf) {
-        self.nodes
-            .entry(from)
-            .or_insert_with(HashSet::new)
-            .insert(to);
+        self.nodes.entry(from).or_default().insert(to);
     }
 
     /// Check for circular dependencies starting from a root node

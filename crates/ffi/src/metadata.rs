@@ -65,18 +65,13 @@ impl Default for CallConfig {
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 enum CallKind {
+    #[default]
     Direct,
     Result,
     Expr,
-}
-
-impl Default for CallKind {
-    fn default() -> Self {
-        CallKind::Direct
-    }
 }
 
 #[derive(Clone, Debug)]

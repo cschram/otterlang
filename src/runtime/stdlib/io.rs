@@ -33,6 +33,11 @@ static BUFFERS: Lazy<RwLock<std::collections::HashMap<HandleId, Buffer>>> =
 // File I/O Functions
 // ============================================================================
 
+/// writes a message `message` to stdout
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_std_io_print(message: *const c_char) {
     if message.is_null() {
@@ -48,6 +53,11 @@ pub unsafe extern "C" fn otter_std_io_print(message: *const c_char) {
     }
 }
 
+/// writes a message `message` to stdout with a newline
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_std_io_println(message: *const c_char) {
     if message.is_null() {
@@ -62,23 +72,30 @@ pub unsafe extern "C" fn otter_std_io_println(message: *const c_char) {
     }
 }
 
+/// writes a message `message` to stderr with a newline
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn otter_std_io_eprintln(message: *const c_char) { unsafe {
-    if message.is_null() {
-        eprintln!();
-        return;
-    }
-
-    let str_ref = match CStr::from_ptr(message).to_str() {
-        Ok(s) => s,
-        Err(_) => {
-            eprintln!("[io.eprintln: invalid UTF-8]");
+pub unsafe extern "C" fn otter_std_io_eprintln(message: *const c_char) {
+    unsafe {
+        if message.is_null() {
+            eprintln!();
             return;
         }
-    };
 
-    eprintln!("{str_ref}");
-}}
+        let str_ref = match CStr::from_ptr(message).to_str() {
+            Ok(s) => s,
+            Err(_) => {
+                eprintln!("[io.eprintln: invalid UTF-8]");
+                return;
+            }
+        };
+
+        eprintln!("{str_ref}");
+    }
+}
 
 #[unsafe(no_mangle)]
 pub extern "C" fn otter_std_io_read_line() -> *mut c_char {
@@ -96,16 +113,26 @@ pub extern "C" fn otter_std_io_read_line() -> *mut c_char {
     }
 }
 
+/// attempts to free the string pointed to by `ptr`
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_std_io_free_string(ptr: *mut c_char) {
     if ptr.is_null() {
         return;
     }
     unsafe {
-        let _ = CString::from_raw(ptr);
+        drop(CString::from_raw(ptr));
     }
 }
 
+/// attempts to read and return the contents of the file pointed to by `path`
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_std_io_read(path: *const c_char) -> *mut c_char {
     if path.is_null() {
@@ -123,6 +150,11 @@ pub unsafe extern "C" fn otter_std_io_read(path: *const c_char) -> *mut c_char {
     }
 }
 
+/// attempts to write `data` to the file pointed to by `path`
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_std_io_write(path: *const c_char, data: *const c_char) -> i32 {
     if path.is_null() || data.is_null() {
@@ -139,6 +171,11 @@ pub unsafe extern "C" fn otter_std_io_write(path: *const c_char, data: *const c_
     }
 }
 
+///
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_std_io_copy(src: *const c_char, dst: *const c_char) -> i32 {
     if src.is_null() || dst.is_null() {
@@ -155,6 +192,11 @@ pub unsafe extern "C" fn otter_std_io_copy(src: *const c_char, dst: *const c_cha
     }
 }
 
+///
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_std_io_lines(path: *const c_char) -> u64 {
     if path.is_null() {
@@ -168,7 +210,7 @@ pub unsafe extern "C" fn otter_std_io_lines(path: *const c_char) -> u64 {
             let reader = BufReader::new(file);
             let mut lines_list = Vec::new();
 
-            for line_str in reader.lines().flatten() {
+            for line_str in reader.lines().map_while(Result::ok) {
                 lines_list.push(line_str);
             }
 
@@ -200,6 +242,11 @@ pub unsafe extern "C" fn otter_std_io_lines(path: *const c_char) -> u64 {
 // Buffer Operations
 // ============================================================================
 
+/// allocates a new vector and returns a handle to it
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_std_io_buffer(data: *const c_char) -> u64 {
     let id = next_handle_id();
@@ -255,6 +302,11 @@ pub extern "C" fn otter_std_io_buffer_read(handle: u64, n: i64) -> *mut c_char {
     }
 }
 
+/// attempts to write the bytes stored in `bytes` to the buffer pointed to by `handle`
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_std_io_buffer_write(handle: u64, bytes: *const c_char) -> i32 {
     if bytes.is_null() {
@@ -302,6 +354,11 @@ pub extern "C" fn otter_std_io_buffer_data(handle: u64) -> *mut c_char {
 // File System Operations
 // ============================================================================
 
+/// returns whether or not a directory exists
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_std_io_exists(path: *const c_char) -> i32 {
     if path.is_null() {
@@ -315,6 +372,11 @@ pub unsafe extern "C" fn otter_std_io_exists(path: *const c_char) -> i32 {
     }
 }
 
+/// attempts to create the directory pointed to by `path`
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_std_io_mkdir(path: *const c_char) -> i32 {
     if path.is_null() {
@@ -327,6 +389,11 @@ pub unsafe extern "C" fn otter_std_io_mkdir(path: *const c_char) -> i32 {
     }
 }
 
+/// attempts to remove the directory pointed to by `path`
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_std_io_rmdir(path: *const c_char) -> i32 {
     if path.is_null() {
@@ -339,6 +406,11 @@ pub unsafe extern "C" fn otter_std_io_rmdir(path: *const c_char) -> i32 {
     }
 }
 
+///
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_std_io_remove(path: *const c_char) -> i32 {
     if path.is_null() {
@@ -351,6 +423,11 @@ pub unsafe extern "C" fn otter_std_io_remove(path: *const c_char) -> i32 {
     }
 }
 
+/// lists all items under directory `path`, returning a handle to a list
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_std_io_list_dir(path: *const c_char) -> u64 {
     if path.is_null() {
@@ -369,14 +446,15 @@ pub unsafe extern "C" fn otter_std_io_list_dir(path: *const c_char) -> u64 {
 
             for entry in entries {
                 if let Ok(entry) = entry
-                    && let Some(file_name) = entry.file_name().to_str() {
-                        let cstr = CString::new(file_name).unwrap();
-                        let ptr = cstr.into_raw();
-                        unsafe {
-                            let _ = otter_builtin_append_list_string(list_handle, ptr);
-                            let _ = CString::from_raw(ptr);
-                        }
+                    && let Some(file_name) = entry.file_name().to_str()
+                {
+                    let cstr = CString::new(file_name).unwrap();
+                    let ptr = cstr.into_raw();
+                    unsafe {
+                        let _ = otter_builtin_append_list_string(list_handle, ptr);
+                        let _ = CString::from_raw(ptr);
                     }
+                }
             }
 
             list_handle
@@ -385,6 +463,11 @@ pub unsafe extern "C" fn otter_std_io_list_dir(path: *const c_char) -> u64 {
     }
 }
 
+/// retrieve whether or not the path pointed to by `path` is a file
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_std_io_is_file(path: *const c_char) -> i32 {
     if path.is_null() {
@@ -398,6 +481,11 @@ pub unsafe extern "C" fn otter_std_io_is_file(path: *const c_char) -> i32 {
     }
 }
 
+/// retrieve whether or not the path pointed to by `path` is a directory
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_std_io_is_dir(path: *const c_char) -> i32 {
     if path.is_null() {
@@ -411,6 +499,11 @@ pub unsafe extern "C" fn otter_std_io_is_dir(path: *const c_char) -> i32 {
     }
 }
 
+/// retrieve the size of a given file
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_std_io_file_size(path: *const c_char) -> i64 {
     if path.is_null() {

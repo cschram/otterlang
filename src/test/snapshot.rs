@@ -1,8 +1,8 @@
+use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
-use anyhow::{Context, Result};
-use serde::{Deserialize, Serialize};
 
 pub struct SnapshotManager {
     snapshot_dir: PathBuf,
@@ -21,9 +21,13 @@ impl SnapshotManager {
             .parent()
             .unwrap_or(Path::new("."))
             .join("__snapshots__");
-        
-        fs::create_dir_all(&snapshot_dir)
-            .with_context(|| format!("failed to create snapshot directory {}", snapshot_dir.display()))?;
+
+        fs::create_dir_all(&snapshot_dir).with_context(|| {
+            format!(
+                "failed to create snapshot directory {}",
+                snapshot_dir.display()
+            )
+        })?;
 
         let snapshot_file = snapshot_dir.join(format!(
             "{}.snap",
@@ -51,8 +55,8 @@ impl SnapshotManager {
         let content = fs::read_to_string(snapshot_file)
             .with_context(|| format!("failed to read snapshot file {}", snapshot_file.display()))?;
 
-        let snapshot_data: SnapshotFile = serde_json::from_str(&content)
-            .with_context(|| "failed to parse snapshot file")?;
+        let snapshot_data: SnapshotFile =
+            serde_json::from_str(&content).with_context(|| "failed to parse snapshot file")?;
 
         Ok(snapshot_data.snapshots)
     }
@@ -74,8 +78,9 @@ impl SnapshotManager {
         let content = serde_json::to_string_pretty(&snapshot_data)
             .context("failed to serialize snapshots")?;
 
-        fs::write(&snapshot_file, content)
-            .with_context(|| format!("failed to write snapshot file {}", snapshot_file.display()))?;
+        fs::write(&snapshot_file, content).with_context(|| {
+            format!("failed to write snapshot file {}", snapshot_file.display())
+        })?;
 
         Ok(())
     }
@@ -108,12 +113,6 @@ impl SnapshotManager {
 pub enum SnapshotResult {
     Match,
     Updated,
-    Mismatch {
-        expected: String,
-        actual: String,
-    },
-    Missing {
-        actual: String,
-    },
+    Mismatch { expected: String, actual: String },
+    Missing { actual: String },
 }
-

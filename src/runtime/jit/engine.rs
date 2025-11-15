@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use inkwell::context::Context as LlvmContext;
 use libloading::{Library, Symbol};
 use std::collections::HashMap;
@@ -6,7 +6,7 @@ use std::ffi::CString;
 use std::sync::{Arc, Mutex};
 use tempfile::TempDir;
 
-use crate::codegen::{build_shared_library, CodegenOptLevel, CodegenOptions};
+use crate::codegen::{CodegenOptLevel, CodegenOptions, build_shared_library};
 use crate::runtime::symbol_registry::SymbolRegistry;
 use crate::typecheck::TypeChecker;
 use ast::nodes::Program;

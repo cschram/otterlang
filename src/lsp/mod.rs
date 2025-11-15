@@ -10,7 +10,7 @@ use crate::runtime::symbol_registry::SymbolRegistry;
 use crate::typecheck::{self, TypeChecker};
 use ast::nodes::{Expr, Program, Statement};
 use common::Span;
-use lexer::{tokenize, LexerError, Token};
+use lexer::{LexerError, Token, tokenize};
 use parser::parse;
 use utils::errors::{Diagnostic as OtterDiagnostic, DiagnosticSeverity as OtterDiagSeverity};
 
@@ -114,10 +114,7 @@ impl SymbolTable {
     }
 
     fn add_reference(&mut self, name: String, span: Span) {
-        self.references
-            .entry(name)
-            .or_default()
-            .push(span);
+        self.references.entry(name).or_default().push(span);
     }
 
     fn find_definition(&self, name: &str) -> Option<&SymbolInfo> {
@@ -302,13 +299,14 @@ impl LanguageServer for Backend {
 
         if let (Some(text), Some(symbol_table)) = (text, symbol_table)
             && let Some(var_name) = word_at_position(&text, position)
-                && let Some(symbol_info) = symbol_table.find_definition(&var_name) {
-                    let range = span_to_range(symbol_info.span, &text);
-                    return Ok(Some(GotoDefinitionResponse::Scalar(Location {
-                        uri: uri.clone(),
-                        range,
-                    })));
-                }
+            && let Some(symbol_info) = symbol_table.find_definition(&var_name)
+        {
+            let range = span_to_range(symbol_info.span, &text);
+            return Ok(Some(GotoDefinitionResponse::Scalar(Location {
+                uri: uri.clone(),
+                range,
+            })));
+        }
 
         Ok(None)
     }
@@ -341,27 +339,28 @@ impl LanguageServer for Backend {
         };
 
         if let (Some(text), Some(symbol_table)) = (text, symbol_table)
-            && let Some(var_name) = word_at_position(&text, position) {
-                let mut locations = Vec::new();
+            && let Some(var_name) = word_at_position(&text, position)
+        {
+            let mut locations = Vec::new();
 
-                // Add definition
-                if let Some(symbol_info) = symbol_table.find_definition(&var_name) {
-                    locations.push(Location {
-                        uri: uri.clone(),
-                        range: span_to_range(symbol_info.span, &text),
-                    });
-                }
-
-                // Add all references
-                for span in symbol_table.find_references(&var_name) {
-                    locations.push(Location {
-                        uri: uri.clone(),
-                        range: span_to_range(*span, &text),
-                    });
-                }
-
-                return Ok(Some(locations));
+            // Add definition
+            if let Some(symbol_info) = symbol_table.find_definition(&var_name) {
+                locations.push(Location {
+                    uri: uri.clone(),
+                    range: span_to_range(symbol_info.span, &text),
+                });
             }
+
+            // Add all references
+            for span in symbol_table.find_references(&var_name) {
+                locations.push(Location {
+                    uri: uri.clone(),
+                    range: span_to_range(*span, &text),
+                });
+            }
+
+            return Ok(Some(locations));
+        }
 
         Ok(None)
     }
@@ -466,35 +465,36 @@ impl LanguageServer for Backend {
         };
 
         if let (Some(text), Some(symbol_table)) = (text, symbol_table)
-            && let Some(old_name) = word_at_position(&text, position) {
-                let mut changes = HashMap::new();
-                let mut edits = Vec::new();
+            && let Some(old_name) = word_at_position(&text, position)
+        {
+            let mut changes = HashMap::new();
+            let mut edits = Vec::new();
 
-                // Add definition rename
-                if let Some(symbol_info) = symbol_table.find_definition(&old_name) {
-                    edits.push(TextEdit {
-                        range: span_to_range(symbol_info.span, &text),
-                        new_text: new_name.clone(),
-                    });
-                }
-
-                // Add all references
-                for span in symbol_table.find_references(&old_name) {
-                    edits.push(TextEdit {
-                        range: span_to_range(*span, &text),
-                        new_text: new_name.clone(),
-                    });
-                }
-
-                if !edits.is_empty() {
-                    changes.insert(uri, edits);
-                    return Ok(Some(WorkspaceEdit {
-                        changes: Some(changes),
-                        document_changes: None,
-                        change_annotations: None,
-                    }));
-                }
+            // Add definition rename
+            if let Some(symbol_info) = symbol_table.find_definition(&old_name) {
+                edits.push(TextEdit {
+                    range: span_to_range(symbol_info.span, &text),
+                    new_text: new_name.clone(),
+                });
             }
+
+            // Add all references
+            for span in symbol_table.find_references(&old_name) {
+                edits.push(TextEdit {
+                    range: span_to_range(*span, &text),
+                    new_text: new_name.clone(),
+                });
+            }
+
+            if !edits.is_empty() {
+                changes.insert(uri, edits);
+                return Ok(Some(WorkspaceEdit {
+                    changes: Some(changes),
+                    document_changes: None,
+                    change_annotations: None,
+                }));
+            }
+        }
 
         Ok(None)
     }
@@ -512,28 +512,29 @@ impl LanguageServer for Backend {
 
         if let (Some(text), Some(symbol_table)) = (text, symbol_table)
             && let Some(var_name) = word_at_position(&text, position)
-                && let Some(symbol_info) = symbol_table.find_definition(&var_name) {
-                    let kind_str = match symbol_info.kind {
-                        SymbolKind::Function => "function",
-                        SymbolKind::Variable => "variable",
-                        SymbolKind::Parameter => "parameter",
-                        SymbolKind::Struct => "struct",
-                        SymbolKind::Enum => "enum",
-                        SymbolKind::TypeAlias => "type",
-                        SymbolKind::Method => "method",
-                    };
-                    let detail = symbol_info
-                        .ty
-                        .as_ref()
-                        .map(|ty| format!("{}: {}", kind_str, ty))
-                        .unwrap_or_else(|| kind_str.to_string());
+            && let Some(symbol_info) = symbol_table.find_definition(&var_name)
+        {
+            let kind_str = match symbol_info.kind {
+                SymbolKind::Function => "function",
+                SymbolKind::Variable => "variable",
+                SymbolKind::Parameter => "parameter",
+                SymbolKind::Struct => "struct",
+                SymbolKind::Enum => "enum",
+                SymbolKind::TypeAlias => "type",
+                SymbolKind::Method => "method",
+            };
+            let detail = symbol_info
+                .ty
+                .as_ref()
+                .map(|ty| format!("{}: {}", kind_str, ty))
+                .unwrap_or_else(|| kind_str.to_string());
 
-                    let contents = HoverContents::Scalar(MarkedString::String(detail));
-                    return Ok(Some(Hover {
-                        contents,
-                        range: Some(span_to_range(symbol_info.span, &text)),
-                    }));
-                }
+            let contents = HoverContents::Scalar(MarkedString::String(detail));
+            return Ok(Some(Hover {
+                contents,
+                range: Some(span_to_range(symbol_info.span, &text)),
+            }));
+        }
 
         Ok(None)
     }
@@ -742,12 +743,16 @@ fn build_symbol_table_from_statements(
         match stmt {
             Statement::Let {
                 name, span, expr, ..
-            } => {
-                if let Some(span) = span {
-                    let ty = infer_type_from_expr(expr);
-                    table.add_variable(name.clone(), *span, ty);
-                }
+            } if span.is_some() => {
+                let ty = infer_type_from_expr(expr);
+                table.add_variable(name.clone(), span.unwrap(), ty);
             }
+
+            Statement::Let {
+                // name, span, expr,
+                ..
+            } => {}
+
             Statement::Function(func) => {
                 // Find function name span from tokens
                 if let Some(span) = find_name_span(&func.name, tokens, text) {
@@ -958,9 +963,10 @@ fn collect_references_from_expr(
 fn find_name_span(name: &str, tokens: &[Token], _text: &str) -> Option<Span> {
     for token in tokens {
         if let lexer::token::TokenKind::Identifier(ref id) = token.kind
-            && id == name {
-                return Some(token.span);
-            }
+            && id == name
+        {
+            return Some(token.span);
+        }
     }
     None
 }

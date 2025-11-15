@@ -1,5 +1,5 @@
-use std::time::Duration;
 use colored::*;
+use std::time::Duration;
 
 use crate::test::TestCase;
 
@@ -43,7 +43,11 @@ impl TestReporter {
         match result {
             TestResult::Passed { duration, output } => {
                 print!("{}", "✓".green());
-                println!(" {} ({:.2}ms)", test.function_name, duration.as_secs_f64() * 1000.0);
+                println!(
+                    " {} ({:.2}ms)",
+                    test.function_name,
+                    duration.as_secs_f64() * 1000.0
+                );
                 if self.verbose && !output.is_empty() {
                     for line in output.lines() {
                         println!("  {}", line);
@@ -57,11 +61,20 @@ impl TestReporter {
                 span,
             } => {
                 print!("{}", "✗".red());
-                println!(" {} ({:.2}ms)", test.function_name, duration.as_secs_f64() * 1000.0);
+                println!(
+                    " {} ({:.2}ms)",
+                    test.function_name,
+                    duration.as_secs_f64() * 1000.0
+                );
                 println!("  {} {}", "Error:".red().bold(), error);
-                
+
                 if let Some((start, _end)) = span {
-                    println!("  {} {}:{}", "Location:".yellow(), test.file_path.display(), start);
+                    println!(
+                        "  {} {}:{}",
+                        "Location:".yellow(),
+                        test.file_path.display(),
+                        start
+                    );
                 }
 
                 if !output.is_empty() {
@@ -80,9 +93,21 @@ impl TestReporter {
 
     pub fn print_summary(&self) {
         let total_duration = self.start_time.elapsed();
-        let passed = self.results.iter().filter(|(_, r)| matches!(r, TestResult::Passed { .. })).count();
-        let failed = self.results.iter().filter(|(_, r)| matches!(r, TestResult::Failed { .. })).count();
-        let skipped = self.results.iter().filter(|(_, r)| matches!(r, TestResult::Skipped { .. })).count();
+        let passed = self
+            .results
+            .iter()
+            .filter(|(_, r)| matches!(r, TestResult::Passed { .. }))
+            .count();
+        let failed = self
+            .results
+            .iter()
+            .filter(|(_, r)| matches!(r, TestResult::Failed { .. }))
+            .count();
+        let skipped = self
+            .results
+            .iter()
+            .filter(|(_, r)| matches!(r, TestResult::Skipped { .. }))
+            .count();
         let total = self.results.len();
 
         println!("\n{}", "Test Summary".bold());
@@ -98,15 +123,17 @@ impl TestReporter {
             println!("\n{}", "Failed Tests:".red().bold());
             for (test, result) in &self.results {
                 if matches!(result, TestResult::Failed { .. })
-                    && let TestResult::Failed { error, .. } = result {
-                        println!("  {} - {}", test.function_name.red(), error);
-                    }
+                    && let TestResult::Failed { error, .. } = result
+                {
+                    println!("  {} - {}", test.function_name.red(), error);
+                }
             }
         }
     }
 
     pub fn has_failures(&self) -> bool {
-        self.results.iter().any(|(_, r)| matches!(r, TestResult::Failed { .. }))
+        self.results
+            .iter()
+            .any(|(_, r)| matches!(r, TestResult::Failed { .. }))
     }
 }
-

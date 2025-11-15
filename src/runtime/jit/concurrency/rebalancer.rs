@@ -1,4 +1,5 @@
 use parking_lot::RwLock;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use super::monitoring::SystemMonitor;
@@ -8,7 +9,7 @@ use super::workload_analyzer::WorkloadAnalyzer;
 
 /// Automatically rebalances the system based on detected conditions
 pub struct Rebalancer {
-    scheduler: Arc<RwLock<UnifiedScheduler>>,
+    scheduler: Rc<RwLock<UnifiedScheduler>>,
     thread_pool: Arc<AdaptiveThreadPool>,
     monitor: Arc<RwLock<SystemMonitor>>,
     analyzer: Arc<RwLock<WorkloadAnalyzer>>,
@@ -18,7 +19,7 @@ pub struct Rebalancer {
 
 impl Rebalancer {
     pub fn new(
-        scheduler: Arc<RwLock<UnifiedScheduler>>,
+        scheduler: Rc<RwLock<UnifiedScheduler>>,
         thread_pool: Arc<AdaptiveThreadPool>,
         monitor: Arc<RwLock<SystemMonitor>>,
         analyzer: Arc<RwLock<WorkloadAnalyzer>>,

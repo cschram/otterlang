@@ -34,6 +34,10 @@ pub extern "C" fn otter_format_bool(value: bool) -> *mut c_char {
 }
 
 /// Concatenate two strings
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_concat_strings(s1: *const c_char, s2: *const c_char) -> *mut c_char {
     if s1.is_null() || s2.is_null() {
@@ -58,6 +62,10 @@ pub unsafe extern "C" fn otter_concat_strings(s1: *const c_char, s2: *const c_ch
 }
 
 /// Free a string allocated by Otter runtime
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_free_string(ptr: *mut c_char) {
     if ptr.is_null() {
@@ -69,6 +77,10 @@ pub unsafe extern "C" fn otter_free_string(ptr: *mut c_char) {
 }
 
 /// Validate UTF-8 string (returns 1 if valid, 0 if invalid)
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_validate_utf8(ptr: *const c_char) -> i32 {
     if ptr.is_null() {
@@ -84,6 +96,10 @@ pub unsafe extern "C" fn otter_validate_utf8(ptr: *const c_char) -> i32 {
 }
 
 /// Create a string from a string literal (makes a copy)
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_string_from_literal(ptr: *const c_char) -> *mut c_char {
     if ptr.is_null() {

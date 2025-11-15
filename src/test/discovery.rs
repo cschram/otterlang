@@ -1,6 +1,6 @@
-use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 use glob::glob;
+use std::path::{Path, PathBuf};
 
 use ast::nodes::{Function, Statement};
 use lexer::tokenize;
@@ -64,15 +64,16 @@ impl TestDiscovery {
 
         for (idx, stmt) in program.statements.iter().enumerate() {
             if let Statement::Function(func) = stmt
-                && Self::is_test_function(func) {
-                    let line_number = Self::estimate_line_number(&source, idx);
-                    tests.push(TestCase {
-                        file_path: file_path.to_path_buf(),
-                        function_name: func.name.clone(),
-                        function: func.clone(),
-                        line_number,
-                    });
-                }
+                && Self::is_test_function(func)
+            {
+                let line_number = Self::estimate_line_number(&source, idx);
+                tests.push(TestCase {
+                    file_path: file_path.to_path_buf(),
+                    function_name: func.name.clone(),
+                    function: func.clone(),
+                    line_number,
+                });
+            }
         }
 
         Ok(tests)
@@ -85,7 +86,11 @@ impl TestDiscovery {
             match self.discover_tests_in_file(file_path) {
                 Ok(tests) => all_tests.extend(tests),
                 Err(e) => {
-                    eprintln!("Warning: Failed to discover tests in {}: {}", file_path.display(), e);
+                    eprintln!(
+                        "Warning: Failed to discover tests in {}: {}",
+                        file_path.display(),
+                        e
+                    );
                 }
             }
         }
@@ -112,4 +117,3 @@ impl Default for TestDiscovery {
         Self::new()
     }
 }
-

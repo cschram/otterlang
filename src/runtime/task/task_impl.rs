@@ -1,6 +1,6 @@
 use parking_lot::{Condvar, Mutex};
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::task::Waker;
 
 /// Unique identifier assigned to each task at creation time.

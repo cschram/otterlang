@@ -26,7 +26,7 @@ impl Eq for TimerEntry {}
 
 impl PartialOrd for TimerEntry {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(other.deadline.cmp(&self.deadline))
+        Some(self.cmp(other))
     }
 }
 
@@ -114,8 +114,8 @@ impl Default for TimerWheel {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::task::{RawWaker, RawWakerVTable};
 
     fn create_test_waker(flag: Arc<AtomicBool>) -> Waker {
@@ -124,13 +124,13 @@ mod tests {
         }
 
         unsafe fn wake(data: *const ()) {
-            let flag = Arc::from_raw(data as *const AtomicBool);
+            let flag = unsafe { Arc::from_raw(data as *const AtomicBool) };
             flag.store(true, Ordering::SeqCst);
             std::mem::forget(flag);
         }
 
         unsafe fn wake_by_ref(data: *const ()) {
-            let flag = &*(data as *const AtomicBool);
+            let flag = unsafe { &*(data as *const AtomicBool) };
             flag.store(true, Ordering::SeqCst);
         }
 

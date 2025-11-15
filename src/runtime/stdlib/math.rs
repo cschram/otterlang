@@ -115,6 +115,11 @@ pub extern "C" fn otter_std_math_randi(max: i64) -> i64 {
     nanos % max
 }
 
+/// returns the mean of the contents in a slice
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_std_math_mean(arr: *const f64, len: i64) -> f64 {
     if arr.is_null() || len <= 0 {
@@ -128,6 +133,11 @@ pub unsafe extern "C" fn otter_std_math_mean(arr: *const f64, len: i64) -> f64 {
     }
 }
 
+/// gets the population standard deviation of the elements in a slice
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_std_math_std(arr: *const f64, len: i64) -> f64 {
     if arr.is_null() || len <= 0 {
@@ -142,6 +152,11 @@ pub unsafe extern "C" fn otter_std_math_std(arr: *const f64, len: i64) -> f64 {
     }
 }
 
+/// sums all of the elements in a slice
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_std_math_sum(arr: *const f64, len: i64) -> f64 {
     if arr.is_null() || len <= 0 {

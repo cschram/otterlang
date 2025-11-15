@@ -3,9 +3,9 @@ use std::ffi::CString;
 use std::fs;
 use std::path::PathBuf;
 
-use abi_stable::std_types::{RString, RVec};
 use abi_stable::StableAbi;
-use anyhow::{anyhow, bail, Context, Result};
+use abi_stable::std_types::{RString, RVec};
+use anyhow::{Context, Result, anyhow, bail};
 use cargo_metadata::{Metadata, MetadataCommand, Package};
 use libloading::Library;
 use once_cell::sync::OnceCell;

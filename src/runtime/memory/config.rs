@@ -3,8 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 /// Garbage collection strategy
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[derive(Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum GcStrategy {
     /// Reference counting only (no cycle detection)
     ReferenceCounting,
@@ -16,7 +15,6 @@ pub enum GcStrategy {
     /// No garbage collection (manual management)
     None,
 }
-
 
 impl std::str::FromStr for GcStrategy {
     type Err = String;
@@ -73,19 +71,22 @@ impl GcConfig {
         let mut config = Self::default();
 
         if let Ok(strategy_str) = std::env::var("OTTER_GC_STRATEGY")
-            && let Ok(strategy) = strategy_str.parse() {
-                config.strategy = strategy;
-            }
+            && let Ok(strategy) = strategy_str.parse()
+        {
+            config.strategy = strategy;
+        }
 
         if let Ok(threshold) = std::env::var("OTTER_GC_THRESHOLD")
-            && let Ok(threshold_val) = threshold.parse::<f64>() {
-                config.memory_threshold = threshold_val.max(0.0).min(1.0);
-            }
+            && let Ok(threshold_val) = threshold.parse::<f64>()
+        {
+            config.memory_threshold = threshold_val.clamp(0., 1.);
+        }
 
         if let Ok(interval) = std::env::var("OTTER_GC_INTERVAL")
-            && let Ok(interval_ms) = interval.parse::<u64>() {
-                config.gc_interval_ms = interval_ms;
-            }
+            && let Ok(interval_ms) = interval.parse::<u64>()
+        {
+            config.gc_interval_ms = interval_ms;
+        }
 
         config
     }

@@ -144,6 +144,11 @@ fn run_http_request(method: &str, url: &str, body: Option<&str>) -> HttpResponse
     }
 }
 
+/// binds a new tcp listener at the address `addr` and returns a handle to it
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_std_net_listen(addr: *const c_char) -> u64 {
     if addr.is_null() {
@@ -164,6 +169,11 @@ pub unsafe extern "C" fn otter_std_net_listen(addr: *const c_char) -> u64 {
     }
 }
 
+/// connects to a tcp address with the address `addr` and returns a handle to it
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_std_net_dial(addr: *const c_char) -> u64 {
     if addr.is_null() {
@@ -190,6 +200,12 @@ pub unsafe extern "C" fn otter_std_net_dial(addr: *const c_char) -> u64 {
     }
 }
 
+/// iterates through the connections until the connection pointed to by the
+/// handle `conn` is found, then writes `data` to it
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_std_net_send(conn: u64, data: *const c_char) -> i32 {
     if data.is_null() {
@@ -249,6 +265,11 @@ pub extern "C" fn otter_std_net_close(conn: u64) {
     CONNECTIONS.write().remove(&conn);
 }
 
+/// runs an HTTP get request at the url `url`
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_std_net_http_get(url: *const c_char) -> u64 {
     if url.is_null() {
@@ -265,6 +286,11 @@ pub unsafe extern "C" fn otter_std_net_http_get(url: *const c_char) -> u64 {
     id
 }
 
+/// runs an HTTP post request at the url `url` with the body `body`
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_std_net_http_post(url: *const c_char, body: *const c_char) -> u64 {
     if url.is_null() {

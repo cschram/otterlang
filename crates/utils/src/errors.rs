@@ -142,5 +142,5 @@ pub fn emit_diagnostics(diagnostics: &[Diagnostic], source: &str) {
 
 /// Emit a single diagnostic
 pub fn emit_diagnostic(diagnostic: &Diagnostic, source: &str) {
-    emit_diagnostics(&[diagnostic.clone()], source);
+    emit_diagnostics(std::slice::from_ref(diagnostic), source);
 }

@@ -84,15 +84,20 @@ pub fn generate_rustdoc_json(dep: &DependencyConfig) -> Result<PathBuf> {
         .with_context(|| format!("failed to read {}", doc_dir.display()))?
         .filter_map(|e| e.ok())
         .map(|e| e.path())
-        .filter(|p| {
+        .find(|p| {
             p.extension().map(|ext| ext == "json").unwrap_or(false)
                 && p.file_stem()
                     .and_then(|s| s.to_str())
                     .map(|s| s == dep.name || s.starts_with(&dep.name))
                     .unwrap_or(false)
         })
-        .next()
-        .ok_or_else(|| anyhow!("rustdoc JSON for crate `{}` not found under {}", dep.name, doc_dir.display()))?;
+        .ok_or_else(|| {
+            anyhow!(
+                "rustdoc JSON for crate `{}` not found under {}",
+                dep.name,
+                doc_dir.display()
+            )
+        })?;
 
     Ok(json_path)
 }
@@ -137,33 +142,29 @@ struct Rustdoc {
 
 fn normalize(name: String, version: Option<String>, doc: Rustdoc) -> CrateSpec {
     use std::collections::HashSet;
-    
+
     let mut items = Vec::new();
     let mut seen = HashSet::new();
 
-    let _target_crate_id = doc.external_crates
+    let _target_crate_id = doc
+        .external_crates
         .iter()
         .find_map(|(id_str, crate_info)| {
-            crate_info.as_object()
+            crate_info
+                .as_object()
                 .and_then(|obj| obj.get("name"))
                 .and_then(|n| n.as_str())
                 .filter(|n| *n == name)
                 .and_then(|_| id_str.parse::<usize>().ok())
         })
         .or_else(|| {
-            if let Some(root_val) = doc.root.as_ref() {
-                if let Some(root_obj) = root_val.as_object() {
-                    root_obj.get("crate_id")
-                        .and_then(|id| id.as_u64())
-                        .map(|id| id as usize)
-                } else if let Some(root_id) = root_val.as_u64() {
-                    Some(root_id as usize)
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
+            doc.root.and_then(|root_value| {
+                root_value
+                    .as_object()
+                    .and_then(|root_obj| root_obj.get("crate_id"))
+                    .and_then(|id| id.as_u64())
+                    .map(|id| id as usize)
+            })
         });
 
     for (path_id, path_value) in &doc.paths {
@@ -223,9 +224,10 @@ fn normalize(name: String, version: Option<String>, doc: Rustdoc) -> CrateSpec {
             None => continue,
         };
 
-        if !item_obj.get("inner")
+        if !item_obj
+            .get("inner")
             .and_then(|i| i.as_object())
-            .map_or(false, |inner| inner.contains_key("function"))
+            .is_some_and(|inner| inner.contains_key("function"))
         {
             continue;
         }
@@ -242,19 +244,16 @@ fn normalize(name: String, version: Option<String>, doc: Rustdoc) -> CrateSpec {
             continue;
         }
 
-
         let expected_params = count_expected_parameters(item_obj);
         if let Some(function_item) = extract_function(item_obj, &path_segments) {
-            if let PublicItem::Function { sig, .. } = &function_item {
-                if expected_params > 0 && sig.params.len() != expected_params {
-                    continue;
-                }
+            if let PublicItem::Function { sig, .. } = &function_item
+                && expected_params > 0
+                && sig.params.len() != expected_params
+            {
+                continue;
             }
             if let PublicItem::Function { path, sig, .. } = &function_item {
-                let key = (
-                    path.segments.clone(),
-                    sig.name.clone(),
-                );
+                let key = (path.segments.clone(), sig.name.clone());
                 if seen.insert(key) {
                     items.push(function_item);
                 }
@@ -269,95 +268,72 @@ fn normalize(name: String, version: Option<String>, doc: Rustdoc) -> CrateSpec {
     }
 }
 
-
 fn is_trait_method(item: &serde_json::Map<String, serde_json::Value>) -> bool {
-    if let Some(inner) = item.get("inner").and_then(|i| i.as_object()) {
-        if let Some(func) = inner.get("function").and_then(|f| f.as_object()) {
-            if let Some(sig) = func.get("sig").and_then(|s| s.as_object()) {
-                if let Some(decl) = sig.get("decl").and_then(|d| d.as_object()) {
-                    if let Some(inputs) = decl.get("inputs").and_then(|i| i.as_array()) {
-                        if let Some(first_input) = inputs.first().and_then(|i| i.as_object()) {
-                            if let Some(name) = first_input.get("name").and_then(|n| n.as_str()) {
-                                if name == "self" || (name.starts_with("&") && name.contains("self")) || name == "&mut self" {
-                                    return true;
-                                }
-                            }
-                            if let Some(ty) = first_input.get("type") {
-                                if let Some(ty_obj) = ty.as_object() {
-                                    if let Some(ty_name) = ty_obj.get("name").and_then(|n| n.as_str()) {
-                                        if ty_name == "Self" || ty_name.contains("self") {
-                                            return true;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    use serde_json::Value;
+
+    if let Some(inner) = item.get("inner").and_then(Value::as_object)
+        && let Some(func) = inner.get("function").and_then(Value::as_object)
+        && let Some(sig) = func.get("sig").and_then(Value::as_object)
+        && let Some(decl) = sig.get("decl").and_then(Value::as_object)
+        && let Some(inputs) = decl.get("inputs").and_then(Value::as_array)
+        && let Some(first_input) = inputs.first().and_then(Value::as_object)
+        && let Some(name) = first_input.get("name").and_then(Value::as_str)
+    {
+        return name.starts_with('&') || name == "self";
     }
+
     false
 }
 
 fn requires_type_parameters(item: &serde_json::Map<String, serde_json::Value>) -> bool {
-    if let Some(inner) = item.get("inner").and_then(|i| i.as_object()) {
-        if let Some(func) = inner.get("function").and_then(|f| f.as_object()) {
-            if let Some(generics) = func.get("generics") {
-                if let Some(generics_obj) = generics.as_object() {
-                    if let Some(params) = generics_obj.get("params").and_then(|p| p.as_array()) {
-                        if !params.is_empty() {
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
+    use serde_json::Value;
+
+    if let Some(inner) = item.get("inner").and_then(Value::as_object)
+        && let Some(func) = inner.get("function").and_then(Value::as_object)
+        && let Some(generics) = func.get("generics").and_then(Value::as_object)
+        && let Some(params) = generics.get("params").and_then(Value::as_array)
+    {
+        return !params.is_empty();
     }
+
     false
 }
 
 fn is_deprecated(item: &serde_json::Map<String, serde_json::Value>) -> bool {
-    if let Some(attrs) = item.get("attrs").and_then(|a| a.as_array()) {
-        for attr in attrs {
-            if let Some(attr_obj) = attr.as_object() {
+    use serde_json::Value;
+
+    item.get("attrs")
+        .and_then(Value::as_array)
+        .is_some_and(|attrs| {
+            attrs.iter().filter_map(Value::as_object).any(|attr_obj| {
                 if let Some(attr_str) = attr_obj.get("value").and_then(|v| v.as_str()) {
-                    if attr_str.contains("deprecated") {
-                        return true;
-                    }
+                    return attr_str.contains("deprecated");
                 }
-                if let Some(attr_str) = attr_obj.get("kind").and_then(|k| k.as_object())
-                    .and_then(|k| k.get("kind")).and_then(|k| k.as_str()) {
-                    if attr_str == "deprecated" {
-                        return true;
-                    }
+
+                if let Some(attr_str) = attr_obj
+                    .get("kind")
+                    .and_then(|k| k.as_object())
+                    .and_then(|k| k.get("kind"))
+                    .and_then(|k| k.as_str())
+                {
+                    return attr_str == "deprecated";
                 }
-            }
-        }
-    }
-    
-    if let Some(docs) = item.get("docs").and_then(|d| d.as_str()) {
-        let docs_lower = docs.to_lowercase();
-        if docs_lower.contains("deprecated") || docs_lower.contains("renamed to") {
-            return true;
-        }
-    }
-    
-    false
+
+                false
+            })
+        })
 }
 
 fn count_expected_parameters(item: &serde_json::Map<String, serde_json::Value>) -> usize {
-    if let Some(inner) = item.get("inner").and_then(|i| i.as_object()) {
-        if let Some(func) = inner.get("function").and_then(|f| f.as_object()) {
-            if let Some(sig) = func.get("sig").and_then(|s| s.as_object()) {
-                if let Some(decl) = sig.get("decl").and_then(|d| d.as_object()) {
-                    if let Some(inputs) = decl.get("inputs").and_then(|i| i.as_array()) {
-                        return inputs.len();
-                    }
-                }
-            }
-        }
+    if let Some(inner) = item.get("inner").and_then(|i| i.as_object())
+        && let Some(func) = inner.get("function").and_then(|f| f.as_object())
+        && let Some(sig) = func.get("sig").and_then(|s| s.as_object())
+        && let Some(decl) = sig.get("decl").and_then(|d| d.as_object())
+        && let Some(inputs) = decl.get("inputs").and_then(|i| i.as_array())
+    {
+        return inputs.len();
     }
+
     0
 }
 
@@ -437,46 +413,48 @@ fn parse_rust_type(ty_value: &serde_json::Value) -> Option<RustTypeRef> {
         }
     }
 
-    if let Some(obj) = ty_value.as_object() {
-        if let Some(ty_name) = obj.get("name").and_then(|n| n.as_str()) {
-            if ty_name == "Option" {
-                if let Some(inner) = obj
-                    .get("inner")
-                    .and_then(|i| i.as_array())
-                    .and_then(|a| a.first())
-                {
-                    return Some(RustTypeRef::Option {
-                        inner: Box::new(parse_rust_type(inner).unwrap_or(RustTypeRef::Opaque)),
-                    });
-                }
-            }
-            if ty_name == "Result" {
-                if let Some(inner) = obj.get("inner").and_then(|i| i.as_array()) {
-                    let ok = inner
-                        .get(0)
-                        .and_then(|t| parse_rust_type(t))
-                        .unwrap_or(RustTypeRef::Opaque);
-                    let err = inner
-                        .get(1)
-                        .and_then(|t| parse_rust_type(t))
-                        .unwrap_or(RustTypeRef::Opaque);
-                    return Some(RustTypeRef::Result {
-                        ok: Box::new(ok),
-                        err: Box::new(err),
-                    });
-                }
-            }
-            if ty_name == "Future" {
-                if let Some(inner) = obj
-                    .get("inner")
-                    .and_then(|i| i.as_array())
-                    .and_then(|a| a.first())
-                {
-                    return Some(RustTypeRef::Future {
-                        output: Box::new(parse_rust_type(inner).unwrap_or(RustTypeRef::Opaque)),
-                    });
-                }
-            }
+    if let Some(obj) = ty_value.as_object()
+        && let Some(ty_name) = obj.get("name").and_then(|n| n.as_str())
+    {
+        if ty_name == "Option"
+            && let Some(inner) = obj
+                .get("inner")
+                .and_then(|i| i.as_array())
+                .and_then(|a| a.first())
+        {
+            return Some(RustTypeRef::Option {
+                inner: Box::new(parse_rust_type(inner).unwrap_or(RustTypeRef::Opaque)),
+            });
+        }
+
+        if ty_name == "Result"
+            && let Some(inner) = obj.get("inner").and_then(|i| i.as_array())
+        {
+            let ok = inner
+                .first()
+                .and_then(parse_rust_type)
+                .unwrap_or(RustTypeRef::Opaque);
+
+            let err = inner
+                .get(1)
+                .and_then(parse_rust_type)
+                .unwrap_or(RustTypeRef::Opaque);
+
+            return Some(RustTypeRef::Result {
+                ok: Box::new(ok),
+                err: Box::new(err),
+            });
+        }
+
+        if ty_name == "Future"
+            && let Some(inner) = obj
+                .get("inner")
+                .and_then(|i| i.as_array())
+                .and_then(|a| a.first())
+        {
+            return Some(RustTypeRef::Future {
+                output: Box::new(parse_rust_type(inner).unwrap_or(RustTypeRef::Opaque)),
+            });
         }
     }
 

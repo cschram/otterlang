@@ -149,10 +149,12 @@ fn parse_fstring(content: String) -> Expr {
 
                     // Parse expression until }
                     let mut expr_content = String::new();
-                    while let Some(ch) = chars.next() {
+
+                    for ch in chars.by_ref() {
                         if ch == '}' {
                             break;
                         }
+
                         expr_content.push(ch);
                     }
 
@@ -220,10 +222,9 @@ fn parse_fstring(content: String) -> Expr {
     if parts
         .iter()
         .all(|part| matches!(part, FStringPart::Text(_)))
+        && let Some(FStringPart::Text(text)) = parts.first()
     {
-        if let Some(FStringPart::Text(text)) = parts.first() {
-            return Expr::Literal(Literal::String(text.clone()));
-        }
+        return Expr::Literal(Literal::String(text.clone()));
     }
 
     Expr::FString { parts }
@@ -340,10 +341,7 @@ fn expr_parser() -> impl Parser<TokenKind, Expr, Error = Simple<TokenKind>> {
             )
             .map(|(name, fields)| Expr::Struct {
                 name,
-                fields: fields
-                    .into_iter()
-                    .map(|(fname, val)| (fname, val))
-                    .collect(),
+                fields: fields.into_iter().collect(),
             });
 
         let list_comprehension = expr
@@ -408,7 +406,7 @@ fn expr_parser() -> impl Parser<TokenKind, Expr, Error = Simple<TokenKind>> {
                 .separated_by(just(TokenKind::Comma))
                 .allow_trailing()
                 .delimited_by(just(TokenKind::LBrace), just(TokenKind::RBrace))
-                .map(|pairs| Expr::Dict(pairs)),
+                .map(Expr::Dict),
         ))
         .boxed();
 
@@ -580,7 +578,7 @@ fn expr_parser() -> impl Parser<TokenKind, Expr, Error = Simple<TokenKind>> {
                         exprs
                             .last()
                             .cloned()
-                            .unwrap_or_else(|| Expr::Literal(Literal::Unit))
+                            .unwrap_or(Expr::Literal(Literal::Unit))
                     }),
             )
             .then_ignore(just(TokenKind::Dedent))
@@ -591,7 +589,7 @@ fn expr_parser() -> impl Parser<TokenKind, Expr, Error = Simple<TokenKind>> {
             })
             .then_ignore(newline.clone().or_not());
 
-        let match_expr = just(TokenKind::Match)
+        just(TokenKind::Match)
             .ignore_then(logical.clone())
             .then(
                 just(TokenKind::Colon)
@@ -604,9 +602,7 @@ fn expr_parser() -> impl Parser<TokenKind, Expr, Error = Simple<TokenKind>> {
                 value: Box::new(value),
                 arms,
             })
-            .or(logical);
-
-        match_expr
+            .or(logical)
     })
 }
 
@@ -662,10 +658,7 @@ fn pattern_parser(
             )
             .map(|(name, fields)| Pattern::Struct {
                 name,
-                fields: fields
-                    .into_iter()
-                    .map(|(fname, pat)| (fname, pat))
-                    .collect(),
+                fields: fields.into_iter().collect(),
             });
 
         let array_pattern = pattern
@@ -1202,10 +1195,7 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
         .then(enum_body.delimited_by(just(TokenKind::Indent), just(TokenKind::Dedent)))
         .then_ignore(newline.clone().or_not())
         .map(
-            |((((pub_kw, _), name), generics), variants): (
-                (((Option<TokenKind>, TokenKind), String), Vec<String>),
-                Vec<ast::nodes::EnumVariant>,
-            )| Statement::Enum {
+            |((((pub_kw, _), name), generics), variants)| Statement::Enum {
                 name,
                 variants,
                 public: pub_kw.is_some(),

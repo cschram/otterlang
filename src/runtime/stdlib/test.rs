@@ -3,6 +3,11 @@ use std::os::raw::c_char;
 
 use crate::runtime::symbol_registry::{FfiFunction, FfiSignature, FfiType, SymbolRegistry};
 
+/// asserts that a condition is truthy; panic-ing with `message` otherwise
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_test_assert(condition: i64, message: *const c_char) -> i32 {
     if condition != 0 {
@@ -21,6 +26,11 @@ pub unsafe extern "C" fn otter_test_assert(condition: i64, message: *const c_cha
     std::process::exit(1);
 }
 
+/// asserts that two strings are equal; panic-ing with `message` otherwise
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_test_assert_eq(
     left: *const c_char,
@@ -57,6 +67,11 @@ pub unsafe extern "C" fn otter_test_assert_eq(
     std::process::exit(1);
 }
 
+/// asserts that two strings are not equal; panic-ing with `message` otherwise
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_test_assert_ne(
     left: *const c_char,
@@ -93,6 +108,12 @@ pub unsafe extern "C" fn otter_test_assert_ne(
     std::process::exit(1);
 }
 
+/// asserts that two floats are approximately equal within `epsilon`; panic-ing
+/// with `message` otherwise
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_test_assert_approx_eq(
     left: f64,
@@ -124,11 +145,21 @@ pub unsafe extern "C" fn otter_test_assert_approx_eq(
     std::process::exit(1);
 }
 
+/// asserts that `condition` is truthy; panic-ing with `message` otherwise
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_test_assert_true(condition: i64, message: *const c_char) -> i32 {
     unsafe { otter_test_assert(condition, message) }
 }
 
+/// asserts that `condition` is falsy; panic-ing with `message` otherwise
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_test_assert_false(condition: i64, message: *const c_char) -> i32 {
     unsafe { otter_test_assert(if condition == 0 { 1 } else { 0 }, message) }
@@ -140,6 +171,11 @@ use std::sync::Mutex;
 static SNAPSHOT_STORAGE: Lazy<Mutex<std::collections::HashMap<String, String>>> =
     Lazy::new(|| Mutex::new(std::collections::HashMap::new()));
 
+/// performs snapshot testing for the given value
+///
+/// # Safety
+///
+/// this function dereferences a raw pointer
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_test_snapshot(name: *const c_char, value: *const c_char) -> i32 {
     let name_str = unsafe { CStr::from_ptr(name) }
@@ -161,7 +197,7 @@ pub unsafe extern "C" fn otter_test_snapshot(name: *const c_char, value: *const 
     match storage.get(&name_str) {
         Some(expected) => {
             if expected == &value_str {
-                0// Match
+                0 // Match
             } else {
                 eprintln!("Snapshot mismatch for '{}':", name_str);
                 eprintln!("  Expected: {}", expected);

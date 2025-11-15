@@ -2,14 +2,14 @@
 //!
 //! Provides command-line interface for profiling OtterLang programs
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
 use clap::Parser;
 use colored::Colorize;
 
-use crate::runtime::memory::profiler::{get_profiler, ProfilingStats};
+use crate::runtime::memory::profiler::{ProfilingStats, get_profiler};
 
 /// Profile command for CLI integration
 #[derive(Clone, Debug, clap::Subcommand)]
@@ -69,7 +69,7 @@ pub fn run_profiler() -> Result<()> {
     run_profiler_subcommand(&cli.command)
 }
 
-fn profile_memory(program: &PathBuf, format: &str) -> Result<()> {
+fn profile_memory(program: &Path, format: &str) -> Result<()> {
     println!(
         "{} Starting memory profiling for: {}",
         "🧠".cyan(),
@@ -148,7 +148,7 @@ fn profile_memory(program: &PathBuf, format: &str) -> Result<()> {
     Ok(())
 }
 
-fn profile_calls(program: &PathBuf, iterations: usize) -> Result<()> {
+fn profile_calls(program: &Path, iterations: usize) -> Result<()> {
     println!(
         "{} Profiling function calls for: {}",
         "🔬".cyan(),
