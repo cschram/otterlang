@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
+use tempfile::env::temp_dir;
 use tracing::{debug, info, warn};
 
 use crate::codegen::{
@@ -363,7 +364,7 @@ pub fn compile_pipeline(
     let codegen_options = settings.codegen_options();
     let binary_path = cache_manager
         .binary_path(&cache_key)
-        .unwrap_or_else(|| PathBuf::from("./target/tmp_binary"));
+        .unwrap_or_else(|| temp_dir().join("tmp_binary"));
 
     let artifact = profiler.record_phase("LLVM Codegen", || {
         build_executable(&program, &expr_types, &binary_path, &codegen_options)
