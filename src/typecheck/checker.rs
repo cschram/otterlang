@@ -177,6 +177,7 @@ impl TypeChecker {
 
         // Third pass: type check function bodies and top-level statements
         for statement in &program.statements {
+            let span = statement.span();
             match statement.as_ref() {
                 Statement::Function(function) => {
                     self.check_function(function)?;
@@ -191,10 +192,14 @@ impl TypeChecker {
                 | Statement::Use { .. }
                 | Statement::PubUse { .. } => {}
                 _ => {
-                    self.errors.push(TypeError::new(format!(
-                        "unexpected statement at top level: {:?}",
-                        statement
-                    )).with_hint("Only function definitions, let statements, and expressions are allowed at the top level".to_string()));
+                    self.errors.push(
+                        TypeError::new(format!(
+                            "unexpected statement at top level: {:?}",
+                            statement
+                        ))
+                        .with_hint("Only function definitions, let statements, and expressions are allowed at the top level".to_string())
+                        .with_span(*span),
+                    );
                 }
             }
         }
@@ -256,7 +261,8 @@ impl TypeChecker {
                         .with_hint(
                             "Ensure the default expression matches the declared parameter type"
                                 .to_string(),
-                        ),
+                        )
+                        .with_span(*param.span()),
                     );
                 }
             } else {
@@ -266,7 +272,8 @@ impl TypeChecker {
                             "parameter `{}` without default cannot follow parameters with defaults",
                             param.as_ref().name
                         ))
-                        .with_hint("Move parameters without defaults before parameters that specify defaults".to_string()),
+                        .with_hint("Move parameters without defaults before parameters that specify defaults".to_string())
+                        .with_span(*param.span()),
                     );
                 }
                 param_defaults.push(false);
@@ -469,23 +476,26 @@ impl TypeChecker {
             {
                 Some(v) => v,
                 None => {
-                    self.errors.push(TypeError::new(format!(
-                        "enum '{}' has no variant '{}'",
-                        enum_name, field
-                    )));
+                    self.errors.push(
+                        TypeError::new(format!("enum '{}' has no variant '{}'", enum_name, field))
+                            .with_span(*object.span()),
+                    );
                     return Ok(Some(TypeInfo::Error));
                 }
             };
 
             let expected_len = variant.fields.len();
             if expected_len != args.len() {
-                self.errors.push(TypeError::new(format!(
-                    "enum variant '{}.{}' expects {} argument(s), got {}",
-                    enum_name,
-                    field,
-                    expected_len,
-                    args.len()
-                )));
+                self.errors.push(
+                    TypeError::new(format!(
+                        "enum variant '{}.{}' expects {} argument(s), got {}",
+                        enum_name,
+                        field,
+                        expected_len,
+                        args.len()
+                    ))
+                    .with_span(*object.span()),
+                );
             }
 
             let mut arg_types = Vec::new();
@@ -498,13 +508,16 @@ impl TypeChecker {
                 if !self.type_contains_enum_generic(field_ty.as_ref(), &definition.generics)
                     && !actual_ty.is_compatible_with(&expected_type)
                 {
-                    self.errors.push(TypeError::new(format!(
-                        "argument for '{}.{}' expects type {}, got {}",
-                        enum_name,
-                        field,
-                        expected_type.display_name(),
-                        actual_ty.display_name()
-                    )));
+                    self.errors.push(
+                        TypeError::new(format!(
+                            "argument for '{}.{}' expects type {}, got {}",
+                            enum_name,
+                            field,
+                            expected_type.display_name(),
+                            actual_ty.display_name()
+                        ))
+                        .with_span(*field_ty.span()),
+                    );
                 }
             }
 
@@ -743,11 +756,14 @@ impl TypeChecker {
                 };
 
                 if !lit_type.is_compatible_with(ty) {
-                    self.errors.push(TypeError::new(format!(
-                        "literal pattern type {} does not match expected type {}",
-                        lit_type.display_name(),
-                        ty.display_name()
-                    )));
+                    self.errors.push(
+                        TypeError::new(format!(
+                            "literal pattern type {} does not match expected type {}",
+                            lit_type.display_name(),
+                            ty.display_name()
+                        ))
+                        .with_span(*pattern.span()),
+                    );
                 }
             }
             Pattern::EnumVariant {
@@ -763,10 +779,13 @@ impl TypeChecker {
                         variants,
                     } => {
                         if name != enum_name {
-                            self.errors.push(TypeError::new(format!(
-                                "enum pattern '{}' does not match value type {}",
-                                enum_name, name
-                            )));
+                            self.errors.push(
+                                TypeError::new(format!(
+                                    "enum pattern '{}' does not match value type {}",
+                                    enum_name, name
+                                ))
+                                .with_span(*pattern.span()),
+                            );
                             return;
                         }
 
@@ -776,7 +795,7 @@ impl TypeChecker {
                                 self.errors.push(TypeError::new(format!(
                                     "enum variant '{}.{}' has {} field(s), but pattern destructures {}",
                                     enum_name, variant, variant_def.fields.len(), fields.len()
-                                )));
+                                )).with_span(*pattern.span()));
                             } else {
                                 // Check that nested patterns match field types
                                 for (field_pattern, field_type) in
@@ -786,10 +805,13 @@ impl TypeChecker {
                                 }
                             }
                         } else {
-                            self.errors.push(TypeError::new(format!(
-                                "enum '{}' has no variant '{}'",
-                                enum_name, variant
-                            )));
+                            self.errors.push(
+                                TypeError::new(format!(
+                                    "enum '{}' has no variant '{}'",
+                                    enum_name, variant
+                                ))
+                                .with_span(*pattern.span()),
+                            );
                         }
                     }
                     TypeInfo::Generic { base, args } if base == enum_name => {
@@ -799,18 +821,24 @@ impl TypeChecker {
                         {
                             self.validate_pattern_against_type(pattern, &built_enum);
                         } else {
-                            self.errors.push(TypeError::new(format!(
-                                "cannot resolve generic enum '{}' with args {:?}",
-                                enum_name, args
-                            )));
+                            self.errors.push(
+                                TypeError::new(format!(
+                                    "cannot resolve generic enum '{}' with args {:?}",
+                                    enum_name, args
+                                ))
+                                .with_span(*pattern.span()),
+                            );
                         }
                     }
                     _ => {
-                        self.errors.push(TypeError::new(format!(
-                            "cannot match enum pattern '{}' against non-enum type {}",
-                            enum_name,
-                            ty.display_name()
-                        )));
+                        self.errors.push(
+                            TypeError::new(format!(
+                                "cannot match enum pattern '{}' against non-enum type {}",
+                                enum_name,
+                                ty.display_name()
+                            ))
+                            .with_span(*pattern.span()),
+                        );
                     }
                 }
             }
@@ -822,10 +850,13 @@ impl TypeChecker {
                         fields: struct_fields,
                     } => {
                         if name != struct_name {
-                            self.errors.push(TypeError::new(format!(
-                                "struct pattern '{}' does not match value type {}",
-                                name, struct_name
-                            )));
+                            self.errors.push(
+                                TypeError::new(format!(
+                                    "struct pattern '{}' does not match value type {}",
+                                    name, struct_name
+                                ))
+                                .with_span(*pattern.span()),
+                            );
                             return;
                         }
 
@@ -837,19 +868,25 @@ impl TypeChecker {
                                 }
                                 // If no pattern, just bind the field - no validation needed
                             } else {
-                                self.errors.push(TypeError::new(format!(
-                                    "struct '{}' has no field '{}'",
-                                    name, field_name
-                                )));
+                                self.errors.push(
+                                    TypeError::new(format!(
+                                        "struct '{}' has no field '{}'",
+                                        name, field_name
+                                    ))
+                                    .with_span(*pattern.span()),
+                                );
                             }
                         }
                     }
                     _ => {
-                        self.errors.push(TypeError::new(format!(
-                            "cannot match struct pattern '{}' against non-struct type {}",
-                            name,
-                            ty.display_name()
-                        )));
+                        self.errors.push(
+                            TypeError::new(format!(
+                                "cannot match struct pattern '{}' against non-struct type {}",
+                                name,
+                                ty.display_name()
+                            ))
+                            .with_span(*pattern.span()),
+                        );
                     }
                 }
             }
@@ -864,10 +901,13 @@ impl TypeChecker {
                         // Rest pattern is allowed and binds remaining elements
                     }
                     _ => {
-                        self.errors.push(TypeError::new(format!(
-                            "cannot match array pattern against non-list type {}",
-                            ty.display_name()
-                        )));
+                        self.errors.push(
+                            TypeError::new(format!(
+                                "cannot match array pattern against non-list type {}",
+                                ty.display_name()
+                            ))
+                            .with_span(*pattern.span()),
+                        );
                     }
                 }
 
@@ -876,9 +916,10 @@ impl TypeChecker {
                     && patterns.is_empty()
                     && rest_name.is_empty()
                 {
-                    self.errors.push(TypeError::new(
-                        "invalid array pattern: empty rest pattern".to_string(),
-                    ));
+                    self.errors.push(
+                        TypeError::new("invalid array pattern: empty rest pattern".to_string())
+                            .with_span(*pattern.span()),
+                    );
                 }
             }
         }
@@ -963,10 +1004,13 @@ impl TypeChecker {
             } => {
                 let cond_type = self.infer_expr_type(cond)?;
                 if !cond_type.is_compatible_with(&TypeInfo::Bool) {
-                    self.errors.push(TypeError::new(format!(
-                        "if condition must be bool, got {}",
-                        cond_type.display_name()
-                    )));
+                    self.errors.push(
+                        TypeError::new(format!(
+                            "if condition must be bool, got {}",
+                            cond_type.display_name()
+                        ))
+                        .with_span(*span),
+                    );
                 }
 
                 self.check_block(then_block)?;
@@ -989,10 +1033,13 @@ impl TypeChecker {
                     TypeInfo::Dict { value, .. } => value.as_ref().clone(),
                     TypeInfo::Str => TypeInfo::Str,
                     _ => {
-                        self.errors.push(TypeError::new(format!(
-                            "cannot iterate over type {}",
-                            iter_type.display_name()
-                        )));
+                        self.errors.push(
+                            TypeError::new(format!(
+                                "cannot iterate over type {}",
+                                iter_type.display_name()
+                            ))
+                            .with_span(*span),
+                        );
                         TypeInfo::Unknown
                     }
                 };
@@ -1013,10 +1060,13 @@ impl TypeChecker {
             Statement::While { cond, body } => {
                 let cond_type = self.infer_expr_type(cond)?;
                 if !cond_type.is_compatible_with(&TypeInfo::Bool) {
-                    self.errors.push(TypeError::new(format!(
-                        "while condition must be bool, got {}",
-                        cond_type.display_name()
-                    )));
+                    self.errors.push(
+                        TypeError::new(format!(
+                            "while condition must be bool, got {}",
+                            cond_type.display_name()
+                        ))
+                        .with_span(*span),
+                    );
                 }
                 self.check_block(body)?;
             }
@@ -1027,32 +1077,40 @@ impl TypeChecker {
                     // Check return type matches function signature
                     if let Some(expected_return_type) = &self.current_function_return_type {
                         if !expr_type.is_compatible_with(expected_return_type) {
-                            self.errors.push(TypeError::new(format!(
-                                "return type mismatch: expected {}, got {}",
-                                expected_return_type.display_name(),
-                                expr_type.display_name()
-                            )));
+                            self.errors.push(
+                                TypeError::new(format!(
+                                    "return type mismatch: expected {}, got {}",
+                                    expected_return_type.display_name(),
+                                    expr_type.display_name()
+                                ))
+                                .with_span(*span),
+                            );
                         }
                     } else {
                         // We're not inside a function context - this is an error
-                        self.errors.push(TypeError::new(
-                            "return statement outside of function".to_string(),
-                        ));
+                        self.errors.push(
+                            TypeError::new("return statement outside of function".to_string())
+                                .with_span(*span),
+                        );
                     }
                 } else {
                     // Bare return - check if function expects unit
                     if let Some(expected_return_type) = &self.current_function_return_type {
                         if !expected_return_type.is_compatible_with(&TypeInfo::Unit) {
-                            self.errors.push(TypeError::new(format!(
-                                "bare return in function that expects return type {}",
-                                expected_return_type.display_name()
-                            )));
+                            self.errors.push(
+                                TypeError::new(format!(
+                                    "bare return in function that expects return type {}",
+                                    expected_return_type.display_name()
+                                ))
+                                .with_span(*span),
+                            );
                         }
                     } else {
                         // We're not inside a function context - this is an error
-                        self.errors.push(TypeError::new(
-                            "return statement outside of function".to_string(),
-                        ));
+                        self.errors.push(
+                            TypeError::new("return statement outside of function".to_string())
+                                .with_span(*span),
+                        );
                     }
                 }
             }
@@ -1101,10 +1159,13 @@ impl TypeChecker {
                         let handler_ty = self.context.type_from_annotation(exception_type);
                         // Validate that handler type is compatible with Error
                         if !handler_ty.is_compatible_with(&TypeInfo::Error) {
-                            self.errors.push(TypeError::new(format!(
-                                "Exception handler type '{}' is not compatible with Error type",
-                                handler_ty.display_name()
-                            )));
+                            self.errors.push(
+                                TypeError::new(format!(
+                                    "Exception handler type '{}' is not compatible with Error type",
+                                    handler_ty.display_name()
+                                ))
+                                .with_span(*span),
+                            );
                         }
                     }
 
@@ -1141,7 +1202,7 @@ impl TypeChecker {
                         self.errors.push(TypeError::new(format!(
                             "Cannot raise expression of type '{}', must be Error-compatible or a string",
                             expr_ty.display_name()
-                        )));
+                        )).with_span(*span));
                     }
                 } else {
                     // Bare raise statement - only valid inside exception handlers
@@ -1225,11 +1286,14 @@ impl TypeChecker {
                                 (TypeInfo::I64, _) | (_, TypeInfo::I64) => Ok(TypeInfo::I64),
                                 (TypeInfo::I32, TypeInfo::I32) => Ok(TypeInfo::I32),
                                 _ => {
-                                    self.errors.push(TypeError::new(format!(
-                                        "cannot apply {op:?} to {} and {}",
-                                        left_type.display_name(),
-                                        right_type.display_name()
-                                    )));
+                                    self.errors.push(
+                                        TypeError::new(format!(
+                                            "cannot apply {op:?} to {} and {}",
+                                            left_type.display_name(),
+                                            right_type.display_name()
+                                        ))
+                                        .with_span(*span),
+                                    );
                                     Ok(TypeInfo::Error)
                                 }
                             }
@@ -1244,11 +1308,14 @@ impl TypeChecker {
                             if left_type.is_compatible_with(&right_type) {
                                 Ok(TypeInfo::Bool)
                             } else {
-                                self.errors.push(TypeError::new(format!(
-                                    "cannot compare {} and {}",
-                                    left_type.display_name(),
-                                    right_type.display_name()
-                                )));
+                                self.errors.push(
+                                    TypeError::new(format!(
+                                        "cannot compare {} and {}",
+                                        left_type.display_name(),
+                                        right_type.display_name()
+                                    ))
+                                    .with_span(*span),
+                                );
                                 Ok(TypeInfo::Error)
                             }
                         }
@@ -1264,11 +1331,14 @@ impl TypeChecker {
                             if allow {
                                 Ok(TypeInfo::Bool)
                             } else {
-                                self.errors.push(TypeError::new(format!(
-                                    "cannot use `is` between {} and {}",
-                                    left_type.display_name(),
-                                    right_type.display_name()
-                                )));
+                                self.errors.push(
+                                    TypeError::new(format!(
+                                        "cannot use `is` between {} and {}",
+                                        left_type.display_name(),
+                                        right_type.display_name()
+                                    ))
+                                    .with_span(*span),
+                                );
                                 Ok(TypeInfo::Error)
                             }
                         }
@@ -1279,11 +1349,14 @@ impl TypeChecker {
                             {
                                 Ok(TypeInfo::Bool)
                             } else {
-                                self.errors.push(TypeError::new(format!(
-                                    "logical operations require bool operands, got {} and {}",
-                                    left_type.display_name(),
-                                    right_type.display_name()
-                                )));
+                                self.errors.push(
+                                    TypeError::new(format!(
+                                        "logical operations require bool operands, got {} and {}",
+                                        left_type.display_name(),
+                                        right_type.display_name()
+                                    ))
+                                    .with_span(*span),
+                                );
                                 Ok(TypeInfo::Error)
                             }
                         }
@@ -1293,11 +1366,14 @@ impl TypeChecker {
                                 (TypeInfo::I32, TypeInfo::I32) => Ok(TypeInfo::I32),
                                 (TypeInfo::I64, TypeInfo::I64) => Ok(TypeInfo::I64),
                                 _ => {
-                                    self.errors.push(TypeError::new(format!(
-                                        "modulo requires integer operands, got {} and {}",
-                                        left_type.display_name(),
-                                        right_type.display_name()
-                                    )));
+                                    self.errors.push(
+                                        TypeError::new(format!(
+                                            "modulo requires integer operands, got {} and {}",
+                                            left_type.display_name(),
+                                            right_type.display_name()
+                                        ))
+                                        .with_span(*span),
+                                    );
                                     Ok(TypeInfo::Error)
                                 }
                             }
@@ -1311,10 +1387,13 @@ impl TypeChecker {
                             if expr_type.is_compatible_with(&TypeInfo::Bool) {
                                 Ok(TypeInfo::Bool)
                             } else {
-                                self.errors.push(TypeError::new(format!(
-                                    "not operator requires bool operand, got {}",
-                                    expr_type.display_name()
-                                )));
+                                self.errors.push(
+                                    TypeError::new(format!(
+                                        "not operator requires bool operand, got {}",
+                                        expr_type.display_name()
+                                    ))
+                                    .with_span(*span),
+                                );
                                 Ok(TypeInfo::Error)
                             }
                         }
@@ -1325,10 +1404,13 @@ impl TypeChecker {
                             {
                                 Ok(expr_type)
                             } else {
-                                self.errors.push(TypeError::new(format!(
-                                    "negation requires numeric operand, got {}",
-                                    expr_type.display_name()
-                                )));
+                                self.errors.push(
+                                    TypeError::new(format!(
+                                        "negation requires numeric operand, got {}",
+                                        expr_type.display_name()
+                                    ))
+                                    .with_span(*span),
+                                );
                                 Ok(TypeInfo::Error)
                             }
                         }
@@ -1415,10 +1497,13 @@ impl TypeChecker {
                                             .get_function(&method_name)
                                             .cloned()
                                             .unwrap_or_else(|| {
-                                                self.errors.push(TypeError::new(format!(
-                                                    "struct '{}' has no method '{}'",
-                                                    name, field
-                                                )));
+                                                self.errors.push(
+                                                    TypeError::new(format!(
+                                                        "struct '{}' has no method '{}'",
+                                                        name, field
+                                                    ))
+                                                    .with_span(*span),
+                                                );
                                                 TypeInfo::Error
                                             });
                                     }
@@ -1432,10 +1517,13 @@ impl TypeChecker {
                                 })
                         }
                         _ => {
-                            self.errors.push(TypeError::new(
-                                "function calls must use identifier or module.function syntax"
-                                    .to_string(),
-                            ));
+                            self.errors.push(
+                                TypeError::new(
+                                    "function calls must use identifier or module.function syntax"
+                                        .to_string(),
+                                )
+                                .with_span(*span),
+                            );
                             return Ok(TypeInfo::Error);
                         }
                     };
@@ -1461,7 +1549,7 @@ impl TypeChecker {
                                     .with_hint(
                                         "Remove extra arguments or verify the function signature"
                                             .to_string(),
-                                    ),
+                                    ).with_span(*span),
                                 );
                                     return Ok(TypeInfo::Error);
                                 }
@@ -1476,7 +1564,8 @@ impl TypeChecker {
                                         .with_hint(
                                             "Provide values for all parameters without defaults"
                                                 .to_string(),
-                                        ),
+                                        )
+                                        .with_span(*span),
                                     );
                                     return Ok(TypeInfo::Error);
                                 }
@@ -1487,17 +1576,18 @@ impl TypeChecker {
                                     let arg_type = self.infer_expr_type(arg)?;
                                     if !arg_type.is_compatible_with(param_type) {
                                         self.errors.push(TypeError::new(format!(
-                                        "argument {} type mismatch: expected {}, got {}",
-                                        i + 1,
-                                        param_type.display_name(),
-                                        arg_type.display_name()
-                                    ))
-                                    .with_hint(format!(
-                                        "Argument {} should be of type `{}`",
-                                        i + 1,
-                                        param_type.display_name()
-                                    ))
-                                    .with_help("Check the function signature and ensure argument types match".to_string()));
+                                            "argument {} type mismatch: expected {}, got {}",
+                                            i + 1,
+                                            param_type.display_name(),
+                                            arg_type.display_name()
+                                        ))
+                                        .with_span(*span)
+                                        .with_hint(format!(
+                                            "Argument {} should be of type `{}`",
+                                            i + 1,
+                                            param_type.display_name()
+                                        ))
+                                        .with_help("Check the function signature and ensure argument types match".to_string()));
                                     }
                                 }
                             } else {
@@ -1537,6 +1627,7 @@ impl TypeChecker {
                                     "cannot call non-function type: {}",
                                     func_type.display_name()
                                 ))
+                                .with_span(*span)
                                 .with_hint("Only functions can be called".to_string())
                                 .with_help(
                                     "Check that you're using the correct function name".to_string(),
@@ -1553,11 +1644,14 @@ impl TypeChecker {
                     if start_type.is_compatible_with(&end_type) {
                         Ok(TypeInfo::Unknown) // Ranges are used for iteration
                     } else {
-                        self.errors.push(TypeError::new(format!(
-                            "range bounds must have compatible types, got {} and {}",
-                            start_type.display_name(),
-                            end_type.display_name()
-                        )));
+                        self.errors.push(
+                            TypeError::new(format!(
+                                "range bounds must have compatible types, got {} and {}",
+                                start_type.display_name(),
+                                end_type.display_name()
+                            ))
+                            .with_span(*span),
+                        );
                         Ok(TypeInfo::Error)
                     }
                 }
@@ -1568,10 +1662,13 @@ impl TypeChecker {
                 } => {
                     let cond_type = self.infer_expr_type(cond)?;
                     if !cond_type.is_compatible_with(&TypeInfo::Bool) {
-                        self.errors.push(TypeError::new(format!(
-                            "if condition must be bool, got {}",
-                            cond_type.display_name()
-                        )));
+                        self.errors.push(
+                            TypeError::new(format!(
+                                "if condition must be bool, got {}",
+                                cond_type.display_name()
+                            ))
+                            .with_span(*span),
+                        );
                     }
 
                     let then_type = self.infer_expr_type(then_branch)?;
@@ -1581,11 +1678,14 @@ impl TypeChecker {
                         if then_type.is_compatible_with(&else_type) {
                             Ok(then_type)
                         } else {
-                            self.errors.push(TypeError::new(format!(
-                                "if branches must have compatible types, got {} and {}",
-                                then_type.display_name(),
-                                else_type.display_name()
-                            )));
+                            self.errors.push(
+                                TypeError::new(format!(
+                                    "if branches must have compatible types, got {} and {}",
+                                    then_type.display_name(),
+                                    else_type.display_name()
+                                ))
+                                .with_span(*span),
+                            );
                             Ok(TypeInfo::Error)
                         }
                     } else {
@@ -1675,7 +1775,8 @@ impl TypeChecker {
                                         .with_hint(
                                             "Check the struct definition for available fields"
                                                 .to_string(),
-                                        ),
+                                        )
+                                        .with_span(*span),
                                 );
                                 Ok(TypeInfo::Error)
                             }
@@ -1692,7 +1793,7 @@ impl TypeChecker {
                                     self.errors.push(TypeError::new(format!(
                                         "Error type has no field '{}'. Available fields: message, code, data",
                                         field
-                                    )));
+                                    )).with_span(*span));
                                     Ok(TypeInfo::Error)
                                 }
                             }
@@ -1704,6 +1805,7 @@ impl TypeChecker {
                                     field,
                                     object_type.display_name()
                                 ))
+                                .with_span(*span)
                                 .with_hint(
                                     "Only struct types and Error support member access".to_string(),
                                 ),
@@ -1790,11 +1892,12 @@ impl TypeChecker {
                             {
                                 self.errors.push(
                                     TypeError::new(format!(
-                                    "array element {} has incompatible type: expected {}, got {}",
-                                    i + 1,
-                                    common_type.display_name(),
-                                    elem_type.display_name()
-                                ))
+                                        "array element {} has incompatible type: expected {}, got {}",
+                                        i + 1,
+                                        common_type.display_name(),
+                                        elem_type.display_name()
+                                    ))
+                                    .with_span(*span)
                                     .with_hint(
                                         "All array elements must have compatible types".to_string(),
                                     ),
@@ -1831,11 +1934,12 @@ impl TypeChecker {
                             if !common_key_type.is_compatible_with(key_type) {
                                 self.errors.push(
                                     TypeError::new(format!(
-                                    "dictionary key {} has incompatible type: expected {}, got {}",
-                                    i + 1,
-                                    common_key_type.display_name(),
-                                    key_type.display_name()
-                                ))
+                                        "dictionary key {} has incompatible type: expected {}, got {}",
+                                        i + 1,
+                                        common_key_type.display_name(),
+                                        key_type.display_name()
+                                    ))
+                                    .with_span(*span)
                                     .with_hint(
                                         "All dictionary keys must have compatible types"
                                             .to_string(),
@@ -1848,11 +1952,12 @@ impl TypeChecker {
                             if !common_value_type.is_compatible_with(value_type) {
                                 self.errors.push(
                                     TypeError::new(format!(
-                                "dictionary value {} has incompatible type: expected {}, got {}",
-                                i + 1,
-                                common_value_type.display_name(),
-                                value_type.display_name()
-                            ))
+                                        "dictionary value {} has incompatible type: expected {}, got {}",
+                                        i + 1,
+                                        common_value_type.display_name(),
+                                        value_type.display_name()
+                                    ))
+                                    .with_span(*span)
                                     .with_hint(
                                         "All dictionary values must have compatible types"
                                             .to_string(),
@@ -1869,6 +1974,7 @@ impl TypeChecker {
                                     "dictionary keys must be str, got {}",
                                     common_key_type.display_name()
                                 ))
+                                .with_span(*span)
                                 .with_hint(
                                     "Only string keys are supported for dictionaries currently"
                                         .to_string(),
@@ -1893,10 +1999,13 @@ impl TypeChecker {
                     let element_iter_type = if let TypeInfo::List(elem) = &iterable_type {
                         elem.as_ref().clone()
                     } else {
-                        self.errors.push(TypeError::new(format!(
-                            "list comprehension expects list iterable, got {}",
-                            iterable_type.display_name()
-                        )));
+                        self.errors.push(
+                            TypeError::new(format!(
+                                "list comprehension expects list iterable, got {}",
+                                iterable_type.display_name()
+                            ))
+                            .with_span(*span),
+                        );
                         TypeInfo::Unknown
                     };
 
@@ -1907,10 +2016,13 @@ impl TypeChecker {
                     if let Some(cond_expr) = condition {
                         let cond_type = self.infer_expr_type(cond_expr)?;
                         if !cond_type.is_compatible_with(&TypeInfo::Bool) {
-                            self.errors.push(TypeError::new(format!(
-                                "list comprehension condition must be bool, got {}",
-                                cond_type.display_name()
-                            )));
+                            self.errors.push(
+                                TypeError::new(format!(
+                                    "list comprehension condition must be bool, got {}",
+                                    cond_type.display_name()
+                                ))
+                                .with_span(*span),
+                            );
                         }
                     }
 
@@ -1938,10 +2050,13 @@ impl TypeChecker {
                     let element_iter_type = if let TypeInfo::List(elem) = &iterable_type {
                         elem.as_ref().clone()
                     } else {
-                        self.errors.push(TypeError::new(format!(
-                            "dict comprehension expects list iterable, got {}",
-                            iterable_type.display_name()
-                        )));
+                        self.errors.push(
+                            TypeError::new(format!(
+                                "dict comprehension expects list iterable, got {}",
+                                iterable_type.display_name()
+                            ))
+                            .with_span(*span),
+                        );
                         TypeInfo::Unknown
                     };
 
@@ -1952,19 +2067,25 @@ impl TypeChecker {
                     if let Some(cond_expr) = condition {
                         let cond_type = self.infer_expr_type(cond_expr)?;
                         if !cond_type.is_compatible_with(&TypeInfo::Bool) {
-                            self.errors.push(TypeError::new(format!(
-                                "dict comprehension condition must be bool, got {}",
-                                cond_type.display_name()
-                            )));
+                            self.errors.push(
+                                TypeError::new(format!(
+                                    "dict comprehension condition must be bool, got {}",
+                                    cond_type.display_name()
+                                ))
+                                .with_span(*span),
+                            );
                         }
                     }
 
                     let key_type = self.infer_expr_type(key)?;
                     if !key_type.is_compatible_with(&TypeInfo::Str) {
-                        self.errors.push(TypeError::new(format!(
-                            "dict comprehension key must be string, got {}",
-                            key_type.display_name()
-                        )));
+                        self.errors.push(
+                            TypeError::new(format!(
+                                "dict comprehension key must be string, got {}",
+                                key_type.display_name()
+                            ))
+                            .with_span(*span),
+                        );
                     }
 
                     let value_type = self.infer_expr_type(value)?;
@@ -1993,6 +2114,7 @@ impl TypeChecker {
                             TypeError::new(
                                 "match expression must have at least one arm".to_string(),
                             )
+                            .with_span(*span)
                             .with_hint("Add at least one pattern to match against".to_string()),
                         );
                         return Ok(TypeInfo::Error);
@@ -2029,10 +2151,13 @@ impl TypeChecker {
                         if let Some(guard) = &arm.as_ref().guard {
                             let guard_type = self.infer_expr_type(guard)?;
                             if !guard_type.is_compatible_with(&TypeInfo::Bool) {
-                                self.errors.push(TypeError::new(format!(
-                                    "match guard must be bool, got {}",
-                                    guard_type.display_name()
-                                )));
+                                self.errors.push(
+                                    TypeError::new(format!(
+                                        "match guard must be bool, got {}",
+                                        guard_type.display_name()
+                                    ))
+                                    .with_span(*span),
+                                );
                             }
                         }
 
@@ -2055,6 +2180,7 @@ impl TypeChecker {
                                     common_type.display_name(),
                                     arm_type.display_name()
                                 ))
+                                .with_span(*span)
                                 .with_hint(
                                     "All match arms must return compatible types".to_string(),
                                 ),
@@ -2070,9 +2196,11 @@ impl TypeChecker {
                         Some(fields) => fields.clone(),
                         None => {
                             self.errors.push(
-                                TypeError::new(format!("unknown struct type: {}", name)).with_hint(
-                                    "Check that the struct is defined before use".to_string(),
-                                ),
+                                TypeError::new(format!("unknown struct type: {}", name))
+                                    .with_hint(
+                                        "Check that the struct is defined before use".to_string(),
+                                    )
+                                    .with_span(*span),
                             );
                             return Ok(TypeInfo::Error);
                         }
@@ -2082,10 +2210,13 @@ impl TypeChecker {
                     let mut provided_fields = std::collections::HashSet::new();
                     for (field_name, field_expr) in fields {
                         if provided_fields.contains(field_name) {
-                            self.errors.push(TypeError::new(format!(
-                                "duplicate field '{}' in struct initialization",
-                                field_name
-                            )));
+                            self.errors.push(
+                                TypeError::new(format!(
+                                    "duplicate field '{}' in struct initialization",
+                                    field_name
+                                ))
+                                .with_span(*span),
+                            );
                         }
                         provided_fields.insert(field_name.clone());
 
@@ -2097,6 +2228,7 @@ impl TypeChecker {
                                         "struct '{}' has no field '{}'",
                                         name, field_name
                                     ))
+                                    .with_span(*span)
                                     .with_hint(format!(
                                         "Available fields: {}",
                                         struct_fields
@@ -2112,23 +2244,29 @@ impl TypeChecker {
 
                         let expr_type = self.infer_expr_type(field_expr)?;
                         if !expr_type.is_compatible_with(field_type) {
-                            self.errors.push(TypeError::new(format!(
-                                "field '{}' of struct '{}' expects type {}, got {}",
-                                field_name,
-                                name,
-                                field_type.display_name(),
-                                expr_type.display_name()
-                            )));
+                            self.errors.push(
+                                TypeError::new(format!(
+                                    "field '{}' of struct '{}' expects type {}, got {}",
+                                    field_name,
+                                    name,
+                                    field_type.display_name(),
+                                    expr_type.display_name()
+                                ))
+                                .with_span(*span),
+                            );
                         }
                     }
 
                     // Check that all required fields are provided (for now, all fields are required)
                     for field_name in struct_fields.keys() {
                         if !provided_fields.contains(field_name) {
-                            self.errors.push(TypeError::new(format!(
-                                "missing required field '{}' in struct '{}' initialization",
-                                field_name, name
-                            )));
+                            self.errors.push(
+                                TypeError::new(format!(
+                                    "missing required field '{}' in struct '{}' initialization",
+                                    field_name, name
+                                ))
+                                .with_span(*span),
+                            );
                         }
                     }
 

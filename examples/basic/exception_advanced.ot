@@ -1,11 +1,11 @@
 def risky_operation(value: float) -> float:
-    if value < 0:
+    if value < 0.0:
         raise "Negative values not allowed"
-    if value == 0:
+    if value == 0.0:
         raise "Zero is not valid"
-    if value > 100:
+    if value > 100.0:
         raise "Value too large"
-    return value * 2
+    return value * 2.0
 
 def main():
     print("Advanced Exception Handling")
@@ -13,7 +13,7 @@ def main():
 
     print("Testing basic operations:")
     try:
-        let result = risky_operation(5)
+        let result = risky_operation(5.0)
         print("Success: 5 processed")
     except Error:
         print("Failed on valid input")
@@ -21,7 +21,7 @@ def main():
         print("Finished testing valid input")
 
     try:
-        let result = risky_operation(-1)
+        let result = risky_operation(-1.0)
         print("Success: -1 processed")
     except Error:
         print("Failed on negative input (expected)")

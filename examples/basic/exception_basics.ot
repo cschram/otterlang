@@ -1,5 +1,5 @@
 def divide(x: float, y: float) -> float:
-    if y == 0:
+    if y == 0.0:
         raise "Division by zero"
     return x / y
 
