@@ -1,0 +1,5 @@
+fn default_param_mismatch(foo: int = "bar"):
+    pass
+
+fn no_default_param_after_default(foo: int = 42, bar: int):
+    pass

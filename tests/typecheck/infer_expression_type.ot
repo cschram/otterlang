@@ -1,0 +1,30 @@
+struct Foo:
+    bar: i64
+
+fn greet(person: str):
+    print(f"Hello, {person}!")
+
+fn main():
+    foo
+    [] + []
+    "foo" == 42
+    true and 42
+    2.5 % 4.3
+    not "true"
+    -"foo"
+    foo()
+    greet("World", 42)
+    greet()
+    greet(42)
+    let bar = ""
+    bar()
+    1.."2"
+    if 42:
+        print("This won't work")
+    let foo = 42
+    foo.baz
+    [1, 1.2, "foo"]
+    {foo: 1, 2: "baz"}
+    [i for i in "str" if 42]
+    {x: i for i in "str" if 42}
+    {1: i for i in 0..10 if i % 2 == 0}

@@ -946,12 +946,12 @@ fn pattern_parser() -> impl Parser<TokenKind, Node<Pattern>, Error = Simple<Toke
             .clone()
             .separated_by(just(TokenKind::Comma))
             .allow_trailing()
-            .delimited_by(just(TokenKind::LBracket), just(TokenKind::RBracket))
             .then(
                 just(TokenKind::DoubleDot)
                     .ignore_then(identifier_parser())
                     .or_not(),
             )
+            .delimited_by(just(TokenKind::LBracket), just(TokenKind::RBracket))
             .map_with_span(|(patterns, rest), span| {
                 Node::new(Pattern::Array { patterns, rest }, span)
             })

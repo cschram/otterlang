@@ -1,0 +1,7 @@
+enum Foo:
+    Bar: (int)
+
+fn main():
+    invalid_variant = Foo.Baz()
+    invalid_parameter_number = Foo.Bar(1, 2)
+    invalid_parameter_type = Foo.Bar("not an int")

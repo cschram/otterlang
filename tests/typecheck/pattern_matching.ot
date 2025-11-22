@@ -1,0 +1,36 @@
+enum ValueKind:
+    Bool
+    Number
+    Str
+    Other: (str)
+
+struct Value:
+    kind: ValueKind
+    data: str
+
+enum OtherKind:
+    Some
+    Thing
+
+fn main():
+    match ValueKind.Bool:
+        case 1:
+            pass
+        case OtherKind.Some:
+            pass
+        case ValueKind.Other(one, two):
+            pass
+        case ValueKind.Float:
+            pass
+    match 42:
+        case OtherKind.Some:
+            pass
+    let val = Value(kind=ValueKind.Number, data="42")
+    match val:
+        case Value { name }:
+            pass
+    match 42:
+        case Value { kind, data }:
+            pass
+        case [head, ..rest]:
+            pass

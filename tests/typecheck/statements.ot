@@ -1,0 +1,18 @@
+fn main():
+    let foo: int = "hello"
+    if foo:
+        print("test")
+    for i in 42:
+        print(i)
+    while 42:
+        print("loop")
+    try:
+        raise 42
+    except i64 as e:
+        print(f"error {e}")
+
+fn foo() -> i64:
+    return "not an i64"
+
+fn bar() -> i64:
+    return

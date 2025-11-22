@@ -193,10 +193,7 @@ impl TypeChecker {
                 | Statement::PubUse { .. } => {}
                 _ => {
                     self.errors.push(
-                        TypeError::new(format!(
-                            "unexpected statement at top level: {:?}",
-                            statement
-                        ))
+                        TypeError::new("unexpected statement at top level".to_string())
                         .with_hint("Only function definitions, let statements, and expressions are allowed at the top level".to_string())
                         .with_span(*span),
                     );
@@ -2445,9 +2442,43 @@ fn ffi_type_to_typeinfo(ft: &FfiType) -> TypeInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cli::register_rust_ffi_functions_for_typecheck;
+    use crate::runtime::symbol_registry::SymbolRegistry;
     use ast::nodes::{BinaryOp, Expr, Literal, Node, NumberLiteral};
     use common::Span;
+    use module::ModuleProcessor;
+    use pretty_assertions::assert_eq;
     use std::f64;
+    use std::path::PathBuf;
+
+    fn get_errors(source: &str) -> Vec<String> {
+        let tokens = lexer::tokenize(source).expect("lexing failed");
+        let program = parser::parse(&tokens).expect("parsing failed");
+        let mut module_processor =
+            ModuleProcessor::new(PathBuf::from("."), Some(PathBuf::from("stdlib/otter")));
+        let registry = SymbolRegistry::global();
+        module_processor
+            .process_imports(&program)
+            .expect("failed to process imports");
+        module_processor
+            .resolve_all_re_exports()
+            .expect("failed to resolve re-exports");
+        register_rust_ffi_functions_for_typecheck(&program, registry)
+            .expect("failed to register FFI functions");
+        let mut type_checker = TypeChecker::with_language_features(LanguageFeatureFlags::default())
+            .with_registry(registry);
+        for module in module_processor.modules() {
+            type_checker.register_module_definitions(&module.program);
+        }
+        match type_checker.check_program(&program) {
+            Ok(_) => panic!("expected type checking to fail"),
+            Err(_) => type_checker
+                .errors()
+                .iter()
+                .map(|e| e.message.clone())
+                .collect(),
+        }
+    }
 
     #[test]
     fn test_type_inference_literal() {
@@ -2500,5 +2531,108 @@ mod tests {
         );
         let ty = checker.infer_expr_type(&expr).unwrap();
         assert_eq!(ty, TypeInfo::F64);
+    }
+
+    #[test]
+    fn test_top_level_errors() {
+        let errors = get_errors(include_str!("../../tests/typecheck/top_level.ot"));
+        assert_eq!(&errors, &["unexpected statement at top level"]);
+    }
+
+    #[test]
+    fn test_infer_function_signature_errors() {
+        let errors = get_errors(include_str!(
+            "../../tests/typecheck/infer_function_signature.ot"
+        ));
+        assert_eq!(
+            &errors,
+            &[
+                "default value for parameter `x` has type str, expected i64",
+                "parameter `y` without default cannot follow parameters with defaults"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_enum_construction_errors() {
+        let errors = get_errors(include_str!("../../tests/typecheck/enum_construction.ot"));
+        assert_eq!(
+            &errors,
+            &[
+                "enum 'Foo' has no variant 'Baz'",
+                "enum variant 'Foo.Bar' expects 1 argument(s), got 2",
+                "argument for 'Foo.Bar' expects type i64, got str"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_pattern_matching_errors() {
+        let errors = get_errors(include_str!("../../tests/typecheck/pattern_matching.ot"));
+        assert_eq!(
+            &errors,
+            &[
+                "literal pattern type i32 does not match expected type ValueKind",
+                "enum pattern 'OtherKind' does not match value type ValueKind",
+                "enum variant 'ValueKind.Other' has 1 field(s), but pattern destructures 2",
+                "enum 'ValueKind' has no variant 'Float'",
+                "cannot match enum pattern 'OtherKind' against non-enum type i64",
+                "struct 'Value' has no field 'name'",
+                "cannot match struct pattern 'Value' against non-struct type i64",
+                "cannot match array pattern against non-list type i64"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_statements_errors() {
+        let errors = get_errors(include_str!("../../tests/typecheck/statements.ot"));
+        assert_eq!(
+            &errors,
+            &[
+                "type mismatch: expected i64, got str",
+                "if condition must be bool, got i64",
+                "cannot iterate over type i64",
+                "while condition must be bool, got i64",
+                "Cannot raise expression of type 'i64', must be Error-compatible or a string",
+                "Exception handler type 'i64' is not compatible with Error type",
+                "return type mismatch: expected i64, got str",
+                "bare return in function that expects return type i64"
+            ]
+        );
+    }
+
+    #[test]
+    fn test_infer_expression_type_errors() {
+        let errors = get_errors(include_str!(
+            "../../tests/typecheck/infer_expression_type.ot"
+        ));
+        assert_eq!(
+            &errors,
+            &[
+                "undefined variable: foo",
+                "cannot apply Add to list<?> and list<?>",
+                "cannot compare str and i64",
+                "logical operations require bool operands, got bool and i64",
+                "modulo requires integer operands, got f64 and f64",
+                "not operator requires bool operand, got str",
+                "negation requires numeric operand, got str",
+                "undefined function: foo",
+                "function expects at most 1 arguments, got 2",
+                "function expects at least 1 arguments, got 0",
+                "argument 1 type mismatch: expected str, got i64",
+                "cannot call non-function type: str",
+                "range bounds must have compatible types, got i64 and str",
+                "if condition must be bool, got i64",
+                "cannot access member 'baz' on type i64",
+                "array element 2 has incompatible type: expected i64, got str",
+                "dictionary value 1 has incompatible type: expected i64, got str",
+                "dictionary keys must be str, got i64",
+                "list comprehension expects list iterable, got str",
+                "list comprehension condition must be bool, got i64",
+                "dict comprehension expects list iterable, got str",
+                "dict comprehension condition must be bool, got i64"
+            ]
+        );
     }
 }

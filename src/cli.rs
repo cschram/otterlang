@@ -858,7 +858,7 @@ fn handle_test(
     Ok(())
 }
 
-fn register_rust_ffi_functions_for_typecheck(
+pub fn register_rust_ffi_functions_for_typecheck(
     program: &ast::nodes::Program,
     registry: &'static SymbolRegistry,
 ) -> Result<()> {
