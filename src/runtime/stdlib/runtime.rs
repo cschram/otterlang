@@ -445,7 +445,7 @@ fn register_std_runtime_symbols(registry: &SymbolRegistry) {
     registry.register(FfiFunction {
         name: "runtime.error_push_context".into(),
         symbol: "otter_error_push_context".into(),
-        signature: FfiSignature::new(vec![], FfiType::Bool),
+        signature: FfiSignature::new(vec![], FfiType::Unit),
     });
 
     registry.register(FfiFunction {

@@ -86,6 +86,7 @@ struct FunctionContext<'ctx> {
     variables: HashMap<String, Variable<'ctx>>,
     loop_stack: Vec<LoopContext<'ctx>>,
     entry_block: Option<BasicBlock<'ctx>>,
+    exception_landingpad: Option<BasicBlock<'ctx>>, // Current exception handler
 }
 
 impl<'ctx> FunctionContext<'ctx> {
@@ -94,6 +95,7 @@ impl<'ctx> FunctionContext<'ctx> {
             variables: HashMap::new(),
             loop_stack: Vec::new(),
             entry_block: None,
+            exception_landingpad: None,
         }
     }
 
@@ -913,6 +915,7 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                 finally_block,
             } => {
                 let try_bb = self.context.append_basic_block(_function, "try_body");
+                let landingpad_bb = self.context.append_basic_block(_function, "landingpad");
                 let handler_check_bb = self.context.append_basic_block(_function, "handler_check");
                 let else_bb = if else_block.is_some() {
                     Some(self.context.append_basic_block(_function, "try_else"))
@@ -927,12 +930,19 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                 let _clear_error_fn = self.declare_symbol_function("runtime.error_clear")?;
                 let pop_context_fn = self.declare_symbol_function("runtime.error_pop_context")?;
 
+                // Declare personality function
+                let personality_fn = self.declare_personality_function()?;
+
                 // Push error context
                 self.builder
                     .build_call(push_context_fn, &[], "push_error_context")?;
 
-                // Jump to try body
+                // Branch to try block
                 self.builder.build_unconditional_branch(try_bb)?;
+
+                // Set landingpad in context so raise statements know where to unwind
+                let old_landingpad = ctx.exception_landingpad;
+                ctx.exception_landingpad = Some(landingpad_bb);
 
                 // Execute try body
                 self.builder.position_at_end(try_bb);
@@ -1058,6 +1068,25 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                     }
                 }
 
+                // Landingpad block - catches exceptions from invoke instructions
+                self.builder.position_at_end(landingpad_bb);
+                
+                // Create landingpad instruction
+                let i8_ptr_type = self.context.i8_type().ptr_type(inkwell::AddressSpace::default());
+                let i32_type = self.context.i32_type();
+                let landingpad_type = self.context.struct_type(&[i8_ptr_type.into(), i32_type.into()], false);
+                
+                let _landingpad = self.builder.build_landing_pad(
+                    landingpad_type,
+                    personality_fn,
+                    &[],  // No specific catch clauses - catch all
+                    true, // This is a cleanup landingpad
+                    "lpad",
+                )?;
+                
+                // After landingpad, branch to handler check
+                self.builder.build_unconditional_branch(handler_check_bb)?;
+
                 // Execute finally block (or just cleanup)
                 self.builder.position_at_end(finally_bb);
                 if let Some(finally_block) = finally_block {
@@ -1077,6 +1106,9 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                         self.builder.build_unconditional_branch(end_bb)?;
                     }
                 }
+
+                // Restore old landingpad context
+                ctx.exception_landingpad = old_landingpad;
 
                 // Continue after try block
                 self.builder.position_at_end(end_bb);
@@ -1167,9 +1199,10 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                                 )?;
 
                                 let raise_fn = self.declare_symbol_function("runtime.raise")?;
-                                self.builder.build_call(
+                                self.build_invoke_or_call(
                                     raise_fn,
                                     &[string_ptr_opaque.into(), string_len.into()],
+                                    ctx,
                                     "raise_error",
                                 )?;
                             }
@@ -1187,9 +1220,10 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                                     "generic_ptr_to_opaque",
                                 )?;
                                 let raise_fn = self.declare_symbol_function("runtime.raise")?;
-                                self.builder.build_call(
+                                self.build_invoke_or_call(
                                     raise_fn,
                                     &[generic_msg_opaque.into(), generic_msg_len.into()],
+                                    ctx,
                                     "raise_generic_error",
                                 )?;
                             }
@@ -1197,15 +1231,13 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                     }
                     None => {
                         // Bare raise - rethrow current error
-                        let rethrow_fn = self.declare_symbol_function("runtime.rethrow")?;
-                        self.builder.build_call(rethrow_fn, &[], "rethrow_error")?;
+```
                     }
                 }
 
-                self.builder
-                    .build_unreachable()
-                    .expect("unreachable after raise");
-
+                // Raise never returns; mark the continuation as unreachable
+                self.builder.build_unreachable()?;
+                
                 Ok(())
             }
         }
@@ -3580,6 +3612,82 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
         let function = self.module.add_function(&entry.symbol, fn_type, None);
         self.declared_functions.insert(name.to_string(), function);
         Ok(function)
+    }
+
+    fn declare_personality_function(&mut self) -> Result<FunctionValue<'ctx>> {
+        // Check if already declared
+        if let Some(function) = self.module.get_function("otter_personality") {
+            return Ok(function);
+        }
+
+        // Personality function signature: i32 (i32, i32, i64, i8*, i8*)
+        let i32_type = self.context.i32_type();
+        let i64_type = self.context.i64_type();
+        let i8_ptr_type = self.context.i8_type().ptr_type(inkwell::AddressSpace::default());
+        
+        let fn_type = i32_type.fn_type(
+            &[
+                i32_type.into(),      // version
+                i32_type.into(),      // actions
+                i64_type.into(),      // exception_class
+                i8_ptr_type.into(),   // exception_object
+                i8_ptr_type.into(),   // context
+            ],
+            false,
+        );
+        let function = self.module.add_function("otter_personality", fn_type, None);
+        Ok(function)
+    }
+
+    fn build_invoke_or_call(
+        &mut self,
+        function: FunctionValue<'ctx>,
+        args: &[BasicMetadataValueEnum<'ctx>],
+        ctx: &FunctionContext<'ctx>,
+        name: &str,
+    ) -> Result<inkwell::values::CallSiteValue<'ctx>> {
+        if let Some(landingpad_bb) = ctx.exception_landingpad {
+            // We're inside a try block - use invoke to enable unwinding
+            let current_fn = self.builder.get_insert_block()
+                .and_then(|bb| bb.get_parent())
+                .ok_or_else(|| anyhow!("no parent function for current block"))?;
+            
+            // Create a "normal" continuation block (where we go if no exception)
+            let normal_bb = self.context.append_basic_block(current_fn, "invoke_cont");
+            
+            // Convert BasicMetadataValueEnum to BasicValueEnum for build_invoke
+            let basic_args: Vec<_> = args.iter()
+                .filter_map(|arg| {
+                    use inkwell::values::BasicValue;
+                    match arg {
+                        inkwell::values::BasicMetadataValueEnum::IntValue(v) => Some((*v).into()),
+                        inkwell::values::BasicMetadataValueEnum::FloatValue(v) => Some((*v).into()),
+                        inkwell::values::BasicMetadataValueEnum::PointerValue(v) => Some((*v).into()),
+                        inkwell::values::BasicMetadataValueEnum::StructValue(v) => Some((*v).into()),
+                        inkwell::values::BasicMetadataValueEnum::ArrayValue(v) => Some((*v).into()),
+                        inkwell::values::BasicMetadataValueEnum::VectorValue(v) => Some((*v).into()),
+                        _ => None,
+                    }
+                })
+                .collect();
+            
+            // Use invoke: if exception occurs, go to landingpad_bb; otherwise go to normal_bb
+            let invoke_site = self.builder.build_invoke(
+                function,
+                &basic_args,
+                normal_bb,
+                landingpad_bb,
+                name,
+            )?;
+            
+            // Position builder at the normal continuation block
+            self.builder.position_at_end(normal_bb);
+            
+            Ok(invoke_site)
+        } else {
+            // Not inside a try block - use regular call
+            Ok(self.builder.build_call(function, args, name)?)
+        }
     }
 
     fn ffi_signature_to_fn_type(&self, signature: &FfiSignature) -> Result<FunctionType<'ctx>> {

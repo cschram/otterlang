@@ -16,7 +16,7 @@ fn register_std_error_symbols(registry: &SymbolRegistry) {
     registry.register(FfiFunction {
         name: "runtime.raise".into(),
         symbol: "otter_error_raise".into(),
-        signature: FfiSignature::new(vec![FfiType::Opaque, FfiType::I64], FfiType::Bool),
+        signature: FfiSignature::new(vec![FfiType::Opaque, FfiType::I64], FfiType::Unit),
     });
 
     registry.register(FfiFunction {

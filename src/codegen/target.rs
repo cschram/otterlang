@@ -422,48 +422,127 @@ void otter_free_string(char* ptr) {
     if (ptr) free(ptr);
 }
 
-bool otter_error_push_context() {
-    // Simple stub - always succeeds
-    return true;
+
+// Exception handling with flag-based approach
+typedef struct ExceptionContext {
+    char* error_message;
+    size_t error_message_len;
+    bool has_error;
+    struct ExceptionContext* prev;
+} ExceptionContext;
+
+static __thread ExceptionContext* context_stack = NULL;
+
+void otter_error_push_context() {
+    ExceptionContext* ctx = (ExceptionContext*)malloc(sizeof(ExceptionContext));
+    if (!ctx) return;
+    
+    ctx->error_message = NULL;
+    ctx->error_message_len = 0;
+    ctx->has_error = false;
+    ctx->prev = context_stack;
+    context_stack = ctx;
 }
 
 bool otter_error_pop_context() {
-    // Simple stub - always succeeds
+    if (!context_stack) return false;
+    
+    ExceptionContext* ctx = context_stack;
+    context_stack = ctx->prev;
+    
+    if (ctx->error_message) {
+        free(ctx->error_message);
+    }
+    free(ctx);
+    
     return true;
 }
 
-bool otter_error_raise(const char* message_ptr, size_t message_len) {
-    if (message_ptr && message_len > 0) {
-        // Print error message to stderr
-        fprintf(stderr, "Exception: %.*sn", (int)message_len, message_ptr);
-    } else {
-        fprintf(stderr, "Exception raisedn");
+void otter_error_raise(const char* message_ptr, size_t message_len) {
+    if (!context_stack) {
+        // No exception handler - print and abort
+        if (message_ptr && message_len > 0) {
+            fprintf(stderr, "Uncaught exception: %.*s\n", (int)message_len, message_ptr);
+        } else {
+            fprintf(stderr, "Uncaught exception\n");
+        }
+        abort();
     }
-    // For now, just print and continue - full exception handling needs stack unwinding
-    return true;
+    
+    // Store error message in current context
+    context_stack->has_error = true;
+    context_stack->error_message_len = message_len;
+    
+    if (message_ptr && message_len > 0) {
+        context_stack->error_message = (char*)malloc(message_len + 1);
+        if (context_stack->error_message) {
+            memcpy(context_stack->error_message, message_ptr, message_len);
+            context_stack->error_message[message_len] = '\0';
+        }
+    }
 }
 
 bool otter_error_clear() {
-    // Simple stub - always succeeds
+    if (!context_stack) return false;
+    
+    context_stack->has_error = false;
+    if (context_stack->error_message) {
+        free(context_stack->error_message);
+        context_stack->error_message = NULL;
+    }
+    context_stack->error_message_len = 0;
+    
     return true;
 }
 
 char* otter_error_get_message() {
-    // Simple stub - return empty string
-    char* result = (char*)malloc(1);
-    if (result) result[0] = '0';
+    if (!context_stack || !context_stack->error_message) {
+        char* result = (char*)malloc(1);
+        if (result) result[0] = '\0';
+        return result;
+    }
+    
+    // Return a copy of the error message
+    char* result = (char*)malloc(context_stack->error_message_len + 1);
+    if (result) {
+        memcpy(result, context_stack->error_message, context_stack->error_message_len);
+        result[context_stack->error_message_len] = '\0';
+    }
     return result;
 }
 
 bool otter_error_has_error() {
-    // Simple stub - no error state tracking yet
-    return false;
+    return context_stack && context_stack->has_error;
 }
 
 void otter_error_rethrow() {
-    // Simple stub - do nothing
+    if (!context_stack || !context_stack->has_error) return;
+    
+    // If there's a previous context, copy error to it
+    if (context_stack->prev) {
+        ExceptionContext* prev = context_stack->prev;
+        prev->has_error = true;
+        prev->error_message_len = context_stack->error_message_len;
+        
+        if (context_stack->error_message) {
+            prev->error_message = (char*)malloc(context_stack->error_message_len + 1);
+            if (prev->error_message) {
+                memcpy(prev->error_message, context_stack->error_message, context_stack->error_message_len);
+                prev->error_message[context_stack->error_message_len] = '\0';
+            }
+        }
+    }
+    // Just return - the unreachable after rethrow will prevent further execution
 }
 
+// Personality function for LLVM exception handling
+// This is called by LLVM during exception unwinding
+int otter_personality(int version, int actions, uint64_t exception_class,
+                      void* exception_object, void* context) {
+    // For our simple exception model, we always claim we can handle the exception
+    // Return 0 (_URC_NO_REASON) to indicate successful handling
+    return 0;
+}
 
 char* otter_builtin_stringify_int(int64_t value) {
     char* buffer = (char*)malloc(32);
