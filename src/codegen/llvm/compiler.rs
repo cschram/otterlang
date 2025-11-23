@@ -919,11 +919,7 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                 } else {
                     None
                 };
-                let finally_bb = if finally_block.is_some() {
-                    Some(self.context.append_basic_block(_function, "try_finally"))
-                } else {
-                    None
-                };
+                let finally_bb = self.context.append_basic_block(_function, "try_finally");
                 let end_bb = self.context.append_basic_block(_function, "try_end");
 
                 // Declare functions we'll need
@@ -973,9 +969,9 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                 let error_target_bb = if !handlers.is_empty() {
                     handler_bbs[0]
                 } else {
-                    else_bb.unwrap_or(end_bb)
+                    else_bb.unwrap_or(finally_bb)
                 };
-                let no_error_target_bb = else_bb.unwrap_or(end_bb);
+                let no_error_target_bb = else_bb.unwrap_or(finally_bb);
 
                 self.builder.build_conditional_branch(
                     has_error,
@@ -1035,7 +1031,7 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                         if let Some(cb) = self.builder.get_insert_block()
                             && cb.get_terminator().is_none()
                         {
-                            let next_bb = finally_bb.unwrap_or(end_bb);
+                            let next_bb = finally_bb;
                             self.builder.build_unconditional_branch(next_bb)?;
                         }
                     }
@@ -1051,33 +1047,29 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                     if let Some(current_block) = self.builder.get_insert_block()
                         && current_block.get_terminator().is_none()
                     {
-                        let next_bb = finally_bb.unwrap_or(end_bb);
+                        let next_bb = finally_bb;
                         self.builder.build_unconditional_branch(next_bb)?;
                     }
                 }
 
-                // Execute finally block if present
+                // Execute finally block (or just cleanup)
+                self.builder.position_at_end(finally_bb);
                 if let Some(finally_block) = finally_block {
-                    let finally_bb_val = finally_bb.unwrap();
-                    self.builder.position_at_end(finally_bb_val);
                     for stmt in &finally_block.as_ref().statements {
                         self.lower_statement(stmt.as_ref(), _function, ctx)?;
                     }
-                    if let Some(current_block) = self.builder.get_insert_block()
-                        && current_block.get_terminator().is_none()
-                    {
-                        self.builder
-                            .build_call(pop_context_fn, &[], "pop_error_context")?;
-                        if let Some(cb) = self.builder.get_insert_block()
-                            && cb.get_terminator().is_none()
-                        {
-                            self.builder.build_unconditional_branch(end_bb)?;
-                        }
-                    }
-                } else {
+                }
+
+                if let Some(current_block) = self.builder.get_insert_block()
+                    && current_block.get_terminator().is_none()
+                {
                     self.builder
                         .build_call(pop_context_fn, &[], "pop_error_context")?;
-                    self.builder.build_unconditional_branch(end_bb)?;
+                    if let Some(cb) = self.builder.get_insert_block()
+                        && cb.get_terminator().is_none()
+                    {
+                        self.builder.build_unconditional_branch(end_bb)?;
+                    }
                 }
 
                 // Continue after try block

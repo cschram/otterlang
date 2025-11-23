@@ -578,6 +578,11 @@ int otter_validate_utf8(const char* ptr) {
     }
     return 1;
 }
+
+int64_t otter_builtin_len_string(const char* s) {
+    if (!s) return 0;
+    return (int64_t)strlen(s);
+}
 "#.to_string()
     }
 
