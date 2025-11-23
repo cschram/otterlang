@@ -28,6 +28,9 @@
       "include": "#struct-definition"
     },
     {
+      "include": "#control-structures"
+    },
+    {
       "include": "#types"
     },
     {
@@ -114,6 +117,145 @@
         }
       ]
     },
+    "control-structures": {
+      "patterns": [
+        {
+          "name": "meta.control.if.otterlang",
+          "begin": "\\b(if|elif)\\b",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.otterlang"
+            }
+          },
+          "end": ":",
+          "patterns": [
+            {
+              "include": "$self"
+            }
+          ]
+        },
+        {
+          "name": "meta.control.else.otterlang",
+          "begin": "\\belse\\b",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.otterlang"
+            }
+          },
+          "end": ":",
+          "patterns": [
+            {
+              "include": "$self"
+            }
+          ]
+        },
+        {
+          "name": "meta.control.while.otterlang",
+          "begin": "\\bwhile\\b",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.otterlang"
+            }
+          },
+          "end": ":",
+          "patterns": [
+            {
+              "include": "$self"
+            }
+          ]
+        },
+        {
+          "name": "meta.control.for.otterlang",
+          "begin": "\\bfor\\b",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.otterlang"
+            }
+          },
+          "end": ":",
+          "patterns": [
+            {
+              "include": "$self"
+            }
+          ]
+        },
+        {
+          "name": "meta.control.try.otterlang",
+          "begin": "\\btry\\b",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.otterlang"
+            }
+          },
+          "end": ":",
+          "patterns": [
+            {
+              "include": "$self"
+            }
+          ]
+        },
+        {
+          "name": "meta.control.except.otterlang",
+          "begin": "\\bexcept\\b",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.otterlang"
+            }
+          },
+          "end": ":",
+          "patterns": [
+            {
+              "include": "$self"
+            }
+          ]
+        },
+        {
+          "name": "meta.control.finally.otterlang",
+          "begin": "\\bfinally\\b",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.otterlang"
+            }
+          },
+          "end": ":",
+          "patterns": [
+            {
+              "include": "$self"
+            }
+          ]
+        },
+        {
+          "name": "meta.control.match.otterlang",
+          "begin": "\\bmatch\\b",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.otterlang"
+            }
+          },
+          "end": ":",
+          "patterns": [
+            {
+              "include": "$self"
+            }
+          ]
+        },
+        {
+          "name": "meta.control.case.otterlang",
+          "begin": "\\bcase\\b",
+          "beginCaptures": {
+            "1": {
+              "name": "keyword.control.otterlang"
+            }
+          },
+          "end": ":",
+          "patterns": [
+            {
+              "include": "$self"
+            }
+          ]
+        }
+      ]
+    },
     "function-parameters": {
       "patterns": [
         {
@@ -148,9 +290,6 @@
           "beginCaptures": {
             "1": {
               "name": "keyword.other.otterlang"
-            },
-            "2": {
-              "name": "keyword.other.otterlang"
             }
           },
           "end": ":",
@@ -158,6 +297,9 @@
             {
               "name": "entity.name.type.enum.otterlang",
               "match": "\\b[A-Z][a-zA-Z0-9_]*(?:<[^>]+>)?\\b"
+            },
+            {
+              "include": "#function-parameters"
             }
           ]
         }
@@ -171,9 +313,6 @@
           "beginCaptures": {
             "1": {
               "name": "keyword.other.otterlang"
-            },
-            "2": {
-              "name": "keyword.other.otterlang"
             }
           },
           "end": ":",
@@ -181,6 +320,9 @@
             {
               "name": "entity.name.type.struct.otterlang",
               "match": "\\b[A-Z][a-zA-Z0-9_]*(?:<[^>]+>)?\\b"
+            },
+            {
+              "include": "#function-parameters"
             }
           ]
         }
