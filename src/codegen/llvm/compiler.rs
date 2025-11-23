@@ -948,12 +948,29 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                 self.builder.position_at_end(try_bb);
                 for stmt in &body.as_ref().statements {
                     // Stop processing if current block already has a terminator (e.g., from raise)
-                    if let Some(current_block) = self.builder.get_insert_block() {
-                        if current_block.get_terminator().is_some() {
-                            break;
-                        }
+                    if let Some(current_block) = self.builder.get_insert_block()
+                        && current_block.get_terminator().is_some() {
+                        break;
                     }
                     self.lower_statement(stmt.as_ref(), _function, ctx)?;
+
+                    // Check for errors after each statement and branch to handler check if error occurred
+                    if let Some(current_block) = self.builder.get_insert_block()
+                        && current_block.get_terminator().is_none() {
+                        let has_error_fn = self.declare_symbol_function("runtime.error_has_error")?;
+                        let has_error_call = self.builder.build_call(has_error_fn, &[], "check_error_after_stmt")?;
+                        let has_error = has_error_call
+                            .try_as_basic_value()
+                            .left()
+                            .ok_or_else(|| anyhow!("has_error did not return a value"))?
+                            .into_int_value();
+
+                        // Create a continue block for when no error
+                        let continue_bb = self.context.append_basic_block(_function, "try_continue");
+
+                        self.builder.build_conditional_branch(has_error, handler_check_bb, continue_bb)?;
+                        self.builder.position_at_end(continue_bb);
+                    }
                 }
 
                 if let Some(current_block) = self.builder.get_insert_block()
@@ -1072,7 +1089,7 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                 self.builder.position_at_end(landingpad_bb);
                 
                 // Create landingpad instruction
-                let i8_ptr_type = self.context.i8_type().ptr_type(inkwell::AddressSpace::default());
+                let i8_ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
                 let i32_type = self.context.i32_type();
                 let landingpad_type = self.context.struct_type(&[i8_ptr_type.into(), i32_type.into()], false);
                 
@@ -1199,10 +1216,9 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                                 )?;
 
                                 let raise_fn = self.declare_symbol_function("runtime.raise")?;
-                                self.build_invoke_or_call(
+                                self.builder.build_call(
                                     raise_fn,
                                     &[string_ptr_opaque.into(), string_len.into()],
-                                    ctx,
                                     "raise_error",
                                 )?;
                             }
@@ -1220,10 +1236,9 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                                     "generic_ptr_to_opaque",
                                 )?;
                                 let raise_fn = self.declare_symbol_function("runtime.raise")?;
-                                self.build_invoke_or_call(
+                                self.builder.build_call(
                                     raise_fn,
                                     &[generic_msg_opaque.into(), generic_msg_len.into()],
-                                    ctx,
                                     "raise_generic_error",
                                 )?;
                             }
@@ -1231,12 +1246,13 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
                     }
                     None => {
                         // Bare raise - rethrow current error
-```
+                        let rethrow_fn = self.declare_symbol_function("runtime.error_rethrow")?;
+                        self.builder.build_call(rethrow_fn, &[], "rethrow_error")?;
                     }
                 }
 
-                // Raise never returns; mark the continuation as unreachable
-                self.builder.build_unreachable()?;
+                // In this implementation, raise sets error state and execution continues
+                // Error checking in try blocks ensures proper exception handling
                 
                 Ok(())
             }
@@ -3623,7 +3639,7 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
         // Personality function signature: i32 (i32, i32, i64, i8*, i8*)
         let i32_type = self.context.i32_type();
         let i64_type = self.context.i64_type();
-        let i8_ptr_type = self.context.i8_type().ptr_type(inkwell::AddressSpace::default());
+        let i8_ptr_type = self.context.ptr_type(inkwell::AddressSpace::default());
         
         let fn_type = i32_type.fn_type(
             &[
@@ -3639,56 +3655,6 @@ impl<'ctx, 'types> Compiler<'ctx, 'types> {
         Ok(function)
     }
 
-    fn build_invoke_or_call(
-        &mut self,
-        function: FunctionValue<'ctx>,
-        args: &[BasicMetadataValueEnum<'ctx>],
-        ctx: &FunctionContext<'ctx>,
-        name: &str,
-    ) -> Result<inkwell::values::CallSiteValue<'ctx>> {
-        if let Some(landingpad_bb) = ctx.exception_landingpad {
-            // We're inside a try block - use invoke to enable unwinding
-            let current_fn = self.builder.get_insert_block()
-                .and_then(|bb| bb.get_parent())
-                .ok_or_else(|| anyhow!("no parent function for current block"))?;
-            
-            // Create a "normal" continuation block (where we go if no exception)
-            let normal_bb = self.context.append_basic_block(current_fn, "invoke_cont");
-            
-            // Convert BasicMetadataValueEnum to BasicValueEnum for build_invoke
-            let basic_args: Vec<_> = args.iter()
-                .filter_map(|arg| {
-                    use inkwell::values::BasicValue;
-                    match arg {
-                        inkwell::values::BasicMetadataValueEnum::IntValue(v) => Some((*v).into()),
-                        inkwell::values::BasicMetadataValueEnum::FloatValue(v) => Some((*v).into()),
-                        inkwell::values::BasicMetadataValueEnum::PointerValue(v) => Some((*v).into()),
-                        inkwell::values::BasicMetadataValueEnum::StructValue(v) => Some((*v).into()),
-                        inkwell::values::BasicMetadataValueEnum::ArrayValue(v) => Some((*v).into()),
-                        inkwell::values::BasicMetadataValueEnum::VectorValue(v) => Some((*v).into()),
-                        _ => None,
-                    }
-                })
-                .collect();
-            
-            // Use invoke: if exception occurs, go to landingpad_bb; otherwise go to normal_bb
-            let invoke_site = self.builder.build_invoke(
-                function,
-                &basic_args,
-                normal_bb,
-                landingpad_bb,
-                name,
-            )?;
-            
-            // Position builder at the normal continuation block
-            self.builder.position_at_end(normal_bb);
-            
-            Ok(invoke_site)
-        } else {
-            // Not inside a try block - use regular call
-            Ok(self.builder.build_call(function, args, name)?)
-        }
-    }
 
     fn ffi_signature_to_fn_type(&self, signature: &FfiSignature) -> Result<FunctionType<'ctx>> {
         let params = self.ffi_param_types(&signature.params)?;

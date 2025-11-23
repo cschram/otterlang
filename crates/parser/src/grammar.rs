@@ -701,7 +701,7 @@ fn expr_parser() -> impl Parser<TokenKind, Node<Expr>, Error = Simple<TokenKind>
         // Define a local statement parser for match arms to avoid circular dependency
         // This duplicates some logic from program_parser but is necessary because expr_parser
         // cannot easily access the recursive statement parser from program_parser.
-        let match_stmt = recursive(|stmt| {
+        let match_stmt = recursive(|_stmt| {
             let print_stmt = just(TokenKind::Print)
                 .ignore_then(
                     expr.clone()
