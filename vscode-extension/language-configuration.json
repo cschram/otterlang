@@ -1,6 +1,10 @@
 {
   "comments": {
-    "lineComment": "#"
+    "lineComment": "#",
+    "blockComment": [
+      "###",
+      "###"
+    ]
   },
   "brackets": [
     [
@@ -19,15 +23,27 @@
   "autoClosingPairs": [
     {
       "open": "{",
-      "close": "}"
+      "close": "}",
+      "notIn": [
+        "string",
+        "comment"
+      ]
     },
     {
       "open": "[",
-      "close": "]"
+      "close": "]",
+      "notIn": [
+        "string",
+        "comment"
+      ]
     },
     {
       "open": "(",
-      "close": ")"
+      "close": ")",
+      "notIn": [
+        "string",
+        "comment"
+      ]
     },
     {
       "open": "\"",
@@ -51,6 +67,20 @@
       "notIn": [
         "string",
         "comment"
+      ]
+    },
+    {
+      "open": "\"\"\"",
+      "close": "\"\"\"",
+      "notIn": [
+        "string"
+      ]
+    },
+    {
+      "open": "'''",
+      "close": "'''",
+      "notIn": [
+        "string"
       ]
     }
   ],
@@ -78,8 +108,17 @@
     [
       "`",
       "`"
+    ],
+    [
+      "\"\"\"",
+      "\"\"\""
+    ],
+    [
+      "'''",
+      "'''"
     ]
   ],
+  "autoCloseBefore": ";:.,=}])>` \n\t",
   "wordPattern": "(-?\\d*\\.\\d\\w*)|([^\\`\\~\\!\\@\\#\\%\\^\\&\\*\\(\\)\\-\\=\\+\\[\\{\\]\\}\\\\\\|\\;\\:\\'\\\"\\,\\.\\<\\>\\/\\?\\s]+)",
   "folding": {
     "markers": {
@@ -88,8 +127,9 @@
     }
   },
   "indentationRules": {
-    "increaseIndentPattern": "^\\s*(def|class|if|elif|else|for|while|try|except|finally|with|match|case).*:\\s*$",
-    "decreaseIndentPattern": "^\\s*(elif|else|except|finally)\\b.*$"
+    "increaseIndentPattern": "^\\s*(fn|def|class|struct|enum|if|elif|else|for|while|try|except|catch|finally|with|match|case)\\b.*:\\s*$",
+    "decreaseIndentPattern": "^\\s*(elif|else|except|catch|finally|case)\\b.*:",
+    "indentNextLinePattern": "^\\s*(fn|def|class|struct|enum|if|elif|else|for|while|try|except|catch|finally|with|match|case)\\b.*:\\s*$"
   },
   "onEnterRules": [
     {
@@ -99,14 +139,47 @@
       }
     },
     {
-      "beforeText": "^\\s*(def|class|if|elif|else|for|while|try|except|finally|with|match|case).*:\\s*$",
+      "beforeText": "^\\s*(fn|def|class|struct|enum)\\b.*:\\s*$",
+      "action": {
+        "indent": "indent",
+        "appendText": ""
+      }
+    },
+    {
+      "beforeText": "^\\s*(if|elif|else|for|while|with|match|case)\\b.*:\\s*$",
       "action": {
         "indent": "indent"
       }
     },
     {
-      "beforeText": "^\\s*\\}\\s*$",
-      "afterText": "^\\s*$",
+      "beforeText": "^\\s*(try|except|catch|finally)\\b.*:\\s*$",
+      "action": {
+        "indent": "indent"
+      }
+    },
+    {
+      "beforeText": "^\\s*\\{\\s*$",
+      "afterText": "^\\s*\\}",
+      "action": {
+        "indent": "indentOutdent"
+      }
+    },
+    {
+      "beforeText": "^\\s*\\[\\s*$",
+      "afterText": "^\\s*\\]",
+      "action": {
+        "indent": "indentOutdent"
+      }
+    },
+    {
+      "beforeText": "^\\s*\\(\\s*$",
+      "afterText": "^\\s*\\)",
+      "action": {
+        "indent": "indentOutdent"
+      }
+    },
+    {
+      "beforeText": "^\\s*(elif|else|except|catch|finally)\\b",
       "action": {
         "indent": "outdent"
       }

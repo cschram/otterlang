@@ -180,5 +180,130 @@
             "\"\"\""
         ],
         "description": "Documentation comment"
+    },
+    "Function with Type Hints": {
+        "prefix": "fnt",
+        "body": [
+            "fn ${1:function_name}(${2:param}: ${3:Type}) -> ${4:ReturnType}:",
+            "    ${0:pass}"
+        ],
+        "description": "Function with type hints"
+    },
+    "Async Function": {
+        "prefix": "async",
+        "body": [
+            "async fn ${1:function_name}(${2:params}):",
+            "    ${0:pass}"
+        ],
+        "description": "Async function definition"
+    },
+    "Property Decorator": {
+        "prefix": "prop",
+        "body": [
+            "@property",
+            "fn ${1:property_name}(self):",
+            "    return self._${1:property_name}"
+        ],
+        "description": "Property decorator"
+    },
+    "Context Manager": {
+        "prefix": "with",
+        "body": [
+            "with ${1:expression} as ${2:variable}:",
+            "    ${0:pass}"
+        ],
+        "description": "With statement (context manager)"
+    },
+    "List Comprehension with Filter": {
+        "prefix": "lcf",
+        "body": [
+            "[${1:expr} for ${2:item} in ${3:iterable} if ${4:condition}]"
+        ],
+        "description": "List comprehension with filter"
+    },
+    "Generator Expression": {
+        "prefix": "gen",
+        "body": [
+            "(${1:expr} for ${2:item} in ${3:iterable})"
+        ],
+        "description": "Generator expression"
+    },
+    "Assert Statement": {
+        "prefix": "assert",
+        "body": [
+            "assert ${1:condition}, \"${2:error message}\""
+        ],
+        "description": "Assert with message"
+    },
+    "Dataclass": {
+        "prefix": "dataclass",
+        "body": [
+            "@dataclass",
+            "class ${1:ClassName}:",
+            "    ${2:field}: ${3:Type}",
+            "    ${0}"
+        ],
+        "description": "Dataclass definition"
+    },
+    "Type Alias": {
+        "prefix": "type",
+        "body": [
+            "type ${1:AliasName} = ${0:Type}"
+        ],
+        "description": "Type alias"
+    },
+    "Pattern Match with Guard": {
+        "prefix": "matchg",
+        "body": [
+            "match ${1:value}:",
+            "    case ${2:pattern} if ${3:guard}:",
+            "        ${0:pass}"
+        ],
+        "description": "Match with guard clause"
+    },
+    "Decorator": {
+        "prefix": "deco",
+        "body": [
+            "@${1:decorator_name}",
+            "fn ${2:function_name}(${3:params}):",
+            "    ${0:pass}"
+        ],
+        "description": "Function with decorator"
+    },
+    "Error Handling with Else": {
+        "prefix": "trye",
+        "body": [
+            "try:",
+            "    ${1:pass}",
+            "except ${2:Exception} as ${3:e}:",
+            "    ${4:pass}",
+            "else:",
+            "    ${0:pass}"
+        ],
+        "description": "Try-except with else"
+    },
+    "Multiline String": {
+        "prefix": "mls",
+        "body": [
+            "\"\"\"",
+            "${0:text}",
+            "\"\"\""
+        ],
+        "description": "Multiline string"
+    },
+    "F-String": {
+        "prefix": "fstr",
+        "body": [
+            "f\"${1:text} {${2:variable}}\""
+        ],
+        "description": "Formatted string"
+    },
+    "Walrus Operator": {
+        "prefix": "walrus",
+        "body": [
+            "if (${1:var} := ${2:expression}):",
+            "    ${0:pass}"
+        ],
+        "description": "Assignment expression (walrus operator)"
     }
 }
