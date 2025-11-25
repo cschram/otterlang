@@ -102,8 +102,26 @@ impl<'ctx> Compiler<'ctx> {
                 Statement::Function(func) => {
                     self.register_function_prototype(func.as_ref())?;
                 }
-                Statement::Struct { .. } => {
-                    // TODO: Register struct types
+                Statement::Struct { name, fields, methods, .. } => {
+                    // Create opaque struct type
+                    let struct_type = self.context.opaque_struct_type(name);
+                    
+                    // Map field types
+                    let mut field_types = Vec::new();
+                    for (_, ty) in fields {
+                        field_types.push(self.map_ast_type(ty.as_ref())?);
+                    }
+                    
+                    // Set body
+                    struct_type.set_body(&field_types, false);
+                    
+                    // Register methods
+                    for method in methods {
+                        let mut method_func = method.as_ref().clone();
+                        method_func.name = format!("{}_{}", name, method_func.name);
+                        
+                        self.register_function_prototype(&method_func)?;
+                    }
                 }
                 _ => {}
             }
@@ -328,13 +346,20 @@ impl<'ctx> Compiler<'ctx> {
             if func.ret_ty.is_none() {
                 self.builder.build_return(None)?;
             } else {
-                // If a return type is specified but no return instruction was generated,
-                // this is an error or implies a default value. For now, we'll just
-                // ensure a terminator exists, which might be an unreachable instruction
-                // if the function is guaranteed to return.
-                // For simplicity, we'll add a void return if no explicit return was found.
-                // A more robust solution would involve inserting a default value for the return type.
-                // For now, we'll let LLVM's verification catch missing returns for non-void functions.
+                let ret_ty = func.ret_ty.as_ref().unwrap();
+                let llvm_ty = self.map_ast_type(ret_ty.as_ref())?;
+                
+                let default_val: inkwell::values::BasicValueEnum = match llvm_ty {
+                    BasicTypeEnum::IntType(t) => t.const_zero().into(),
+                    BasicTypeEnum::FloatType(t) => t.const_zero().into(),
+                    BasicTypeEnum::PointerType(t) => t.const_null().into(),
+                    BasicTypeEnum::StructType(t) => t.const_zero().into(), // For unit/void which might be mapped to struct or i8
+                    BasicTypeEnum::ArrayType(t) => t.const_zero().into(),
+                    BasicTypeEnum::VectorType(t) => t.const_zero().into(),
+                    _ => unimplemented!("Unsupported return type for default value generation"),
+                };
+                
+                self.builder.build_return(Some(&default_val))?;
             }
         }
 
@@ -414,12 +439,6 @@ impl<'ctx> Compiler<'ctx> {
     /// Register a root with the GC
     pub fn build_gc_add_root(&mut self, ptr: PointerValue<'ctx>) -> Result<()> {
         let add_root_func = self.get_or_declare_ffi_function("gc.add_root")?;
-
-        // Cast to opaque pointer (i8*) if needed, but our declare_external_function handles it as i64/opaque
-        // Wait, declare_external_function maps Opaque to i64.
-        // But PointerValue is a pointer. We might need to cast it to i64 or void* depending on how we declared it.
-        // In declare_external_function: FfiType::Opaque => i64_type
-        // So we need to ptrtoint.
 
         let ptr_as_int = self
             .builder
