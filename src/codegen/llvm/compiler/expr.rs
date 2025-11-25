@@ -239,11 +239,7 @@ impl<'ctx> Compiler<'ctx> {
                 let len_val = self.builder.build_call(get_len_fn, &[handle.into()], "len")?
                     .try_as_basic_value().left().unwrap().into_int_value();
                 
-                let min_len = if rest.is_some() {
-                    patterns.len() as u64
-                } else {
-                    patterns.len() as u64
-                };
+                let min_len = patterns.len() as u64;
                 
                 let expected_len = self.context.i64_type().const_int(min_len, false);
                 let len_check = if rest.is_some() {

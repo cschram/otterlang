@@ -40,16 +40,22 @@ fn ensure_runtime_library() -> Result<PathBuf> {
         .context("failed to create runtime library directory")?;
 
     // Build the runtime as a static library
-    let status = Command::new("cargo")
-        .args(&[
-            "rustc",
-            "--release",
-            "--lib",
-            "--crate-type=staticlib",
-            "--target-dir",
-            runtime_lib_dir.to_str().unwrap(),
-        ])
-        .status()
+    let mut cmd = Command::new("cargo");
+    cmd.args([
+        "rustc",
+        "--release",
+        "--lib",
+        "--crate-type=staticlib",
+        "--target-dir",
+        runtime_lib_dir.to_str().unwrap(),
+    ]);
+
+    // Set macOS deployment target for compatibility
+    if cfg!(target_os = "macos") {
+        cmd.env("MACOSX_DEPLOYMENT_TARGET", "11.0");
+    }
+
+    let status = cmd.status()
         .context("failed to build runtime static library")?;
 
     if !status.success() {
@@ -209,7 +215,7 @@ pub fn build_executable(
         
         // Add macOS version minimum
         if runtime_triple.os == "darwin" {
-            cc.arg("-mmacosx-version-min=10.15");
+            cc.arg("-mmacosx-version-min=11.0");
         }
         
         // Add target triple for cross-compilation (skip for native target)
@@ -252,10 +258,11 @@ pub fn build_executable(
             let linker_target_flag = preferred_target_flag(&linker);
             cc.arg(linker_target_flag).arg(&triple_str);
         }
-        
-        // Add macOS version minimum to avoid platform load command warning
+
+        // Add macOS version minimum and suppress compatibility warnings
         if runtime_triple.os == "darwin" {
-            cc.arg("-mmacosx-version-min=10.15");
+            cc.arg("-mmacosx-version-min=11.0");
+            cc.arg("-w"); // Suppress warnings
         }
         
         if let Some(ref rt_o) = runtime_o {
@@ -452,7 +459,7 @@ pub fn build_shared_library(
         
         // Add macOS version minimum
         if runtime_triple.os == "darwin" {
-            cc.arg("-mmacosx-version-min=10.15");
+            cc.arg("-mmacosx-version-min=11.0");
         }
         
         let compiler_target_flag = preferred_target_flag(&c_compiler);
@@ -510,7 +517,7 @@ pub fn build_shared_library(
         
         // Add macOS version minimum to avoid platform load command warning
         if runtime_triple.os == "darwin" {
-            cc.arg("-mmacosx-version-min=10.15");
+            cc.arg("-mmacosx-version-min=11.0");
         }
         
         cc.arg("-o").arg(&lib_path).arg(&object_path);

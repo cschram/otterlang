@@ -709,12 +709,10 @@ impl<'ctx> Compiler<'ctx> {
 
                 self.builder.position_at_end(next_handler_bb);
             }
+        } else if let Some(finally_bb) = finally_bb {
+            self.builder.build_unconditional_branch(finally_bb)?;
         } else {
-            if let Some(finally_bb) = finally_bb {
-                self.builder.build_unconditional_branch(finally_bb)?;
-            } else {
-                self.builder.build_unconditional_branch(exit_bb)?;
-            }
+            self.builder.build_unconditional_branch(exit_bb)?;
         }
 
         if let Some(else_blk) = else_block {
@@ -757,11 +755,12 @@ impl<'ctx> Compiler<'ctx> {
             let exception_val = self.eval_expr(exception_expr, ctx)?;
 
             // Look up the runtime throw function
-            if let Some(throw_fn) = self.declared_functions.get("__otter_throw") {
-                if let Some(exc_val) = exception_val.value {
-                    self.builder
-                        .build_call(*throw_fn, &[exc_val.into()], "throw")?;
-                }
+            if let (Some(throw_fn), Some(exc_val)) = (
+                self.declared_functions.get("__otter_throw"),
+                exception_val.value
+            ) {
+                self.builder
+                    .build_call(*throw_fn, &[exc_val.into()], "throw")?;
             }
         }
 

@@ -1250,10 +1250,11 @@ impl Default for TargetTriple {
 
         // Normalize common macOS triples
         // Convert "arm64" to "aarch64" for LLVM compatibility
-        if triple_str.starts_with("arm64-apple-darwin") {
-            Self::new("aarch64", "apple", "darwin", None::<String>)
+        // Force macOS 11.0 for compatibility
+        if triple_str.starts_with("arm64-apple-darwin") || triple_str.starts_with("aarch64-apple-darwin") {
+            Self::new("aarch64", "apple", "darwin11.0", None::<String>)
         } else if triple_str.starts_with("x86_64-apple-darwin") {
-            Self::new("x86_64", "apple", "darwin", None::<String>)
+            Self::new("x86_64", "apple", "darwin11.0", None::<String>)
         } else {
             Self::parse(&triple_str)
                 .unwrap_or_else(|_| Self::new("x86_64", "unknown", "linux", Some("gnu")))
