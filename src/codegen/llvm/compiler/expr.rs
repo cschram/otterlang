@@ -16,7 +16,13 @@ impl<'ctx> Compiler<'ctx> {
         ctx: &mut FunctionContext<'ctx>,
     ) -> Result<EvaluatedValue<'ctx>> {
         match expr {
-            Expr::Literal(lit) => self.eval_literal(lit.as_ref()),
+            Expr::Literal(lit) => {
+                // Get type from type checker first
+                // Clone the type info to avoid borrow conflicts with eval_literal
+                let expr_id = expr as *const Expr as usize;
+                let type_info_opt = self.expr_types.get(&expr_id).cloned();
+                self.eval_literal(lit.as_ref(), type_info_opt.as_ref())
+            }
             Expr::Identifier(name) => {
                 if let Some(var) = ctx.get(name) {
                     let var_ty = var.ty.clone();
@@ -280,7 +286,9 @@ impl<'ctx> Compiler<'ctx> {
                 Ok(())
             }
             Pattern::Literal(lit) => {
-                let lit_val = self.eval_literal(lit.as_ref())?;
+                // Get type info from the pattern's expression if available
+                let type_info = None; // Patterns don't have type info in expr_types, use None
+                let lit_val = self.eval_literal(lit.as_ref(), type_info)?;
                 let is_equal = self.build_equality_check(matched_val, &lit_val)?;
                 self.builder
                     .build_conditional_branch(is_equal, success_bb, fail_bb)?;
@@ -653,12 +661,12 @@ impl<'ctx> Compiler<'ctx> {
             bail!("Expected FString expression")
         };
 
-        let mut result = self.eval_literal(&Literal::String("".to_string()))?;
+        let mut result = self.eval_literal(&Literal::String("".to_string()), None)?;
 
         for part in parts {
             let part_val = match part.as_ref() {
                 ast::nodes::FStringPart::Text(s) => {
-                    self.eval_literal(&Literal::String(s.clone()))?
+                    self.eval_literal(&Literal::String(s.clone()), None)?
                 }
                 ast::nodes::FStringPart::Expr(e) => self.eval_expr(e.as_ref(), ctx)?,
             };
@@ -669,11 +677,56 @@ impl<'ctx> Compiler<'ctx> {
         Ok(result)
     }
 
-    fn eval_literal(&mut self, lit: &Literal) -> Result<EvaluatedValue<'ctx>> {
+    fn eval_literal(&mut self, lit: &Literal, type_info: Option<&TypeInfo>) -> Result<EvaluatedValue<'ctx>> {
         match lit {
             Literal::Number(n) => {
-                let val = self.context.f64_type().const_float(n.value);
-                Ok(EvaluatedValue::with_value(val.into(), OtterType::F64))
+                // Use type checker's type information if available
+                let inferred_type = if let Some(type_info) = type_info {
+                    match type_info {
+                        TypeInfo::I64 => OtterType::I64,
+                        TypeInfo::I32 => OtterType::I32,
+                        TypeInfo::F64 => OtterType::F64,
+                        _ => {
+                            // Fallback: use the literal's is_float_literal flag or check value
+                            let is_float = n.is_float_literal || n.value.fract() != 0.0;
+                            if is_float {
+                                OtterType::F64
+                            } else {
+                                OtterType::I64
+                            }
+                        }
+                    }
+                } else {
+                    // No type info from checker, use the literal's is_float_literal flag or check value
+                    let is_float = n.is_float_literal || n.value.fract() != 0.0;
+                    if is_float {
+                        OtterType::F64
+                    } else {
+                        OtterType::I64
+                    }
+                };
+                
+                match inferred_type {
+                    OtterType::I64 => {
+                        // Convert f64 to i64, then to u64 for const_int
+                        let i64_val = n.value as i64;
+                        let val = self.context.i64_type().const_int(i64_val as u64, false);
+                        Ok(EvaluatedValue::with_value(val.into(), OtterType::I64))
+                    }
+                    OtterType::I32 => {
+                        let val = self.context.i32_type().const_int((n.value as i32) as u64, false);
+                        Ok(EvaluatedValue::with_value(val.into(), OtterType::I32))
+                    }
+                    OtterType::F64 => {
+                        let val = self.context.f64_type().const_float(n.value);
+                        Ok(EvaluatedValue::with_value(val.into(), OtterType::F64))
+                    }
+                    _ => {
+                        // Fallback to F64 for safety
+                        let val = self.context.f64_type().const_float(n.value);
+                        Ok(EvaluatedValue::with_value(val.into(), OtterType::F64))
+                    }
+                }
             }
             Literal::String(s) => {
                 let val = self.builder.build_global_string_ptr(s, "str_lit")?;
@@ -1138,7 +1191,6 @@ impl<'ctx> Compiler<'ctx> {
 
             // Incompatible types
             _ => {
-                eprintln!("DEBUG: FAILED coerce_type {:?} -> {:?}", from_ty, to_ty);
                 bail!("Cannot coerce type {:?} to {:?}", from_ty, to_ty)
             }
         }

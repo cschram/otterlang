@@ -985,17 +985,12 @@ pub extern "C" fn otter_builtin_iter_next_array(iter_handle: u64) -> u64 {
     let mut iterators = ARRAY_ITERATORS.write();
     if let Some(iter) = iterators.get_mut(&iter_handle) {
         if let Some(val) = list_value(iter.handle, iter.index as i64) {
-            eprintln!("DEBUG: Iterator returning value: {:?}", val);
             iter.index += 1;
-            let encoded = encode_runtime_value(&val);
-            eprintln!("DEBUG: Encoded as: {:#x}", encoded);
-            encoded
+            encode_runtime_value(&val)
         } else {
-            eprintln!("DEBUG: No value at index {} for list handle {}", iter.index, iter.handle);
             0
         }
     } else {
-        eprintln!("DEBUG: Iterator handle {} not found", iter_handle);
         0
     }
 }
@@ -1038,10 +1033,14 @@ pub extern "C" fn otter_builtin_iter_next_string(iter_handle: u64) -> u64 {
                 let char_len = c.len_utf8();
                 iter.index += char_len;
                 let s = c.to_string();
-                return CString::new(s).unwrap().into_raw() as u64;
+                // Return encoded value instead of raw pointer
+                encode_runtime_value(&Value::String(s))
+            } else {
+                0
             }
+        } else {
+            0
         }
-        0
     } else {
         0
     }
@@ -2152,7 +2151,7 @@ pub extern "C" fn otter_decode_value_as_i64(encoded: u64) -> i64 {
     
     match kind {
         ValueKind::I64 => {
-            // Look up in registry
+            // Look up in registry for full precision
             let values = RUNTIME_VALUES.read();
             if let Some(rv) = values.get(&handle) {
                 if let Value::I64(i) = rv.value {
@@ -2170,26 +2169,18 @@ pub extern "C" fn otter_decode_value_as_f64(encoded: u64) -> f64 {
     let kind = decode_value_kind(encoded);
     let handle = decode_value_handle(encoded);
     
-    eprintln!("DEBUG: Decoding F64 - kind={:?}, handle={}, encoded={:#x}", kind, handle, encoded);
-    
     match kind {
         ValueKind::F64 => {
-            // Look up in registry
+            // Look up in registry for full precision
             let values = RUNTIME_VALUES.read();
-            eprintln!("DEBUG: Registry has {} entries", values.len());
             if let Some(rv) = values.get(&handle) {
                 if let Value::F64(f) = rv.value {
-                    eprintln!("DEBUG: Found F64 value: {}", f);
                     return f;
                 }
             }
-            eprintln!("WARNING: F64 value not found for handle {}", handle);
             0.0
         }
-        _ => {
-            eprintln!("WARNING: Decoding as F64 but kind is {:?}", kind);
-            0.0
-        }
+        _ => 0.0,
     }
 }
 

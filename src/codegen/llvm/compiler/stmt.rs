@@ -564,9 +564,27 @@ impl<'ctx> Compiler<'ctx> {
         
         let encoded_int = encoded_value.into_int_value();
         
-        // Call the appropriate runtime decode function based on expected type
-        match expected_type {
-            OtterType::Unit => Ok(None),
+        // First, decode based on the runtime's actual type tag
+        // Then convert to expected type if needed
+        
+        // Get the runtime type tag (upper 8 bits)
+        let tag_shift = self.context.i64_type().const_int(56, false);
+        let runtime_tag = self.builder.build_right_shift(
+            encoded_int,
+            tag_shift,
+            false,
+            "runtime_tag",
+        )?;
+        
+        // Decode the value based on its runtime type, then convert to expected type
+        // We'll use a switch-like approach: decode as the runtime type, then coerce
+        
+        // For now, try decoding as the expected type first (most common case)
+        // If that fails at runtime, we'd need runtime type checking, but for now
+        // we trust the type checker and decode directly
+        
+        let decoded_value = match expected_type {
+            OtterType::Unit => return Ok(None),
             
             OtterType::Bool => {
                 let decode_fn = self.get_or_declare_ffi_function("__otter_decode_value_as_bool")?;
@@ -575,27 +593,116 @@ impl<'ctx> Compiler<'ctx> {
                     &[encoded_int.into()],
                     "decoded_bool",
                 )?;
-                Ok(Some(result.try_as_basic_value().left().unwrap()))
+                result.try_as_basic_value().left().unwrap()
             }
             
             OtterType::I64 => {
-                let decode_fn = self.get_or_declare_ffi_function("__otter_decode_value_as_i64")?;
-                let result = self.builder.build_call(
-                    decode_fn,
+                // Decode as I64, but runtime might have stored as F64
+                // Try I64 first, but we may need to handle F64->I64 conversion
+                let decode_i64_fn = self.get_or_declare_ffi_function("__otter_decode_value_as_i64")?;
+                let decode_f64_fn = self.get_or_declare_ffi_function("__otter_decode_value_as_f64")?;
+                
+                // Check runtime tag: if it's F64 (tag 3), decode as F64 then convert
+                let tag_three = self.context.i64_type().const_int(3, false);
+                let is_f64 = self.builder.build_int_compare(
+                    inkwell::IntPredicate::EQ,
+                    runtime_tag,
+                    tag_three,
+                    "is_f64_tag",
+                )?;
+                
+                // Create basic blocks for conditional decoding
+                let function = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+                let decode_i64_bb = self.context.append_basic_block(function, "decode_i64");
+                let decode_f64_bb = self.context.append_basic_block(function, "decode_f64");
+                let merge_bb = self.context.append_basic_block(function, "decode_merge");
+                
+                self.builder.build_conditional_branch(is_f64, decode_f64_bb, decode_i64_bb)?;
+                
+                // Decode as I64
+                self.builder.position_at_end(decode_i64_bb);
+                let i64_result = self.builder.build_call(
+                    decode_i64_fn,
                     &[encoded_int.into()],
                     "decoded_i64",
                 )?;
-                Ok(Some(result.try_as_basic_value().left().unwrap()))
-            }
-            
-            OtterType::F64 => {
-                let decode_fn = self.get_or_declare_ffi_function("__otter_decode_value_as_f64")?;
-                let result = self.builder.build_call(
-                    decode_fn,
+                let i64_val = i64_result.try_as_basic_value().left().unwrap();
+                self.builder.build_unconditional_branch(merge_bb)?;
+                
+                // Decode as F64 then convert to I64
+                self.builder.position_at_end(decode_f64_bb);
+                let f64_result = self.builder.build_call(
+                    decode_f64_fn,
                     &[encoded_int.into()],
                     "decoded_f64",
                 )?;
-                Ok(Some(result.try_as_basic_value().left().unwrap()))
+                let f64_val = f64_result.try_as_basic_value().left().unwrap().into_float_value();
+                let converted_i64 = self.builder.build_float_to_signed_int(
+                    f64_val,
+                    self.context.i64_type(),
+                    "f64_to_i64",
+                )?;
+                self.builder.build_unconditional_branch(merge_bb)?;
+                
+                // Merge: create PHI node
+                self.builder.position_at_end(merge_bb);
+                let phi = self.builder.build_phi(self.context.i64_type(), "decoded_phi")?;
+                phi.add_incoming(&[(&i64_val.into_int_value(), decode_i64_bb), (&converted_i64, decode_f64_bb)]);
+                phi.as_basic_value()
+            }
+            
+            OtterType::F64 => {
+                // Decode as F64, but runtime might have stored as I64
+                let decode_i64_fn = self.get_or_declare_ffi_function("__otter_decode_value_as_i64")?;
+                let decode_f64_fn = self.get_or_declare_ffi_function("__otter_decode_value_as_f64")?;
+                
+                // Check runtime tag: if it's I64 (tag 2), decode as I64 then convert
+                let tag_two = self.context.i64_type().const_int(2, false);
+                let is_i64 = self.builder.build_int_compare(
+                    inkwell::IntPredicate::EQ,
+                    runtime_tag,
+                    tag_two,
+                    "is_i64_tag",
+                )?;
+                
+                // Create basic blocks for conditional decoding
+                let function = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+                let decode_i64_bb = self.context.append_basic_block(function, "decode_i64_for_f64");
+                let decode_f64_bb = self.context.append_basic_block(function, "decode_f64_direct");
+                let merge_bb = self.context.append_basic_block(function, "decode_f64_merge");
+                
+                self.builder.build_conditional_branch(is_i64, decode_i64_bb, decode_f64_bb)?;
+                
+                // Decode as I64 then convert to F64
+                self.builder.position_at_end(decode_i64_bb);
+                let i64_result = self.builder.build_call(
+                    decode_i64_fn,
+                    &[encoded_int.into()],
+                    "decoded_i64",
+                )?;
+                let i64_val = i64_result.try_as_basic_value().left().unwrap().into_int_value();
+                let converted_f64 = self.builder.build_signed_int_to_float(
+                    i64_val,
+                    self.context.f64_type(),
+                    "i64_to_f64",
+                )?;
+                self.builder.build_unconditional_branch(merge_bb)?;
+                
+                // Decode as F64 directly
+                self.builder.position_at_end(decode_f64_bb);
+                let f64_result = self.builder.build_call(
+                    decode_f64_fn,
+                    &[encoded_int.into()],
+                    "decoded_f64",
+                )?;
+                let f64_val = f64_result.try_as_basic_value().left().unwrap();
+                self.builder.build_unconditional_branch(merge_bb)?;
+                
+                // Merge: create PHI node
+                self.builder.position_at_end(merge_bb);
+                let phi = self.builder.build_phi(self.context.f64_type(), "decoded_f64_phi")?;
+                phi.add_incoming(&[(&converted_f64, decode_i64_bb), (&f64_val.into_float_value(), decode_f64_bb)]);
+                phi.as_basic_value()
             }
             
             OtterType::Str => {
@@ -605,7 +712,7 @@ impl<'ctx> Compiler<'ctx> {
                     &[encoded_int.into()],
                     "decoded_string",
                 )?;
-                Ok(Some(result.try_as_basic_value().left().unwrap()))
+                result.try_as_basic_value().left().unwrap()
             }
             
             OtterType::List | OtterType::Map | OtterType::Opaque => {
@@ -615,37 +722,91 @@ impl<'ctx> Compiler<'ctx> {
                     &[encoded_int.into()],
                     "decoded_handle",
                 )?;
-                Ok(Some(result.try_as_basic_value().left().unwrap()))
+                result.try_as_basic_value().left().unwrap()
             }
             
             OtterType::I32 => {
-                let decode_fn = self.get_or_declare_ffi_function("__otter_decode_value_as_i64")?;
-                let result = self.builder.build_call(
-                    decode_fn,
+                // Decode as I64 then truncate
+                let decode_i64_fn = self.get_or_declare_ffi_function("__otter_decode_value_as_i64")?;
+                let decode_f64_fn = self.get_or_declare_ffi_function("__otter_decode_value_as_f64")?;
+                
+                // Check runtime tag
+                let tag_two = self.context.i64_type().const_int(2, false);
+                let tag_three = self.context.i64_type().const_int(3, false);
+                let is_i64 = self.builder.build_int_compare(
+                    inkwell::IntPredicate::EQ,
+                    runtime_tag,
+                    tag_two,
+                    "is_i64_tag",
+                )?;
+                let is_f64 = self.builder.build_int_compare(
+                    inkwell::IntPredicate::EQ,
+                    runtime_tag,
+                    tag_three,
+                    "is_f64_tag",
+                )?;
+                
+                let function = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+                let decode_i64_bb = self.context.append_basic_block(function, "decode_i64_for_i32");
+                let decode_f64_bb = self.context.append_basic_block(function, "decode_f64_for_i32");
+                let decode_other_bb = self.context.append_basic_block(function, "decode_other_for_i32");
+                let merge_bb = self.context.append_basic_block(function, "decode_i32_merge");
+                
+                // Branch based on type
+                self.builder.build_conditional_branch(is_i64, decode_i64_bb, decode_other_bb)?;
+                self.builder.position_at_end(decode_other_bb);
+                self.builder.build_conditional_branch(is_f64, decode_f64_bb, decode_i64_bb)?;
+                
+                // Decode as I64
+                self.builder.position_at_end(decode_i64_bb);
+                let i64_result = self.builder.build_call(
+                    decode_i64_fn,
                     &[encoded_int.into()],
                     "decoded_i64",
                 )?;
-                let i64_val = result.try_as_basic_value().left().unwrap().into_int_value();
-                Ok(Some(self.builder.build_int_truncate(
+                let i64_val = i64_result.try_as_basic_value().left().unwrap().into_int_value();
+                let truncated = self.builder.build_int_truncate(
                     i64_val,
                     self.context.i32_type(),
                     "truncated_i32",
-                )?.into()))
+                )?;
+                self.builder.build_unconditional_branch(merge_bb)?;
+                
+                // Decode as F64 then convert to I32
+                self.builder.position_at_end(decode_f64_bb);
+                let f64_result = self.builder.build_call(
+                    decode_f64_fn,
+                    &[encoded_int.into()],
+                    "decoded_f64",
+                )?;
+                let f64_val = f64_result.try_as_basic_value().left().unwrap().into_float_value();
+                let converted_i32 = self.builder.build_float_to_signed_int(
+                    f64_val,
+                    self.context.i32_type(),
+                    "f64_to_i32",
+                )?;
+                self.builder.build_unconditional_branch(merge_bb)?;
+                
+                // Merge
+                self.builder.position_at_end(merge_bb);
+                let phi = self.builder.build_phi(self.context.i32_type(), "decoded_i32_phi")?;
+                phi.add_incoming(&[(&truncated, decode_i64_bb), (&converted_i32, decode_f64_bb)]);
+                phi.as_basic_value()
             }
             
             OtterType::Struct(_) | OtterType::Tuple(_) => {
-                // WARNING: Structs and tuples are currently handled as opaque handles.
-                // If the compiler expects a StructType (by value), this may be incorrect.
-                // TODO: Implement proper struct decoding/deserialization from handle.
+                // Structs and tuples are handled as opaque handles
                 let decode_fn = self.get_or_declare_ffi_function("__otter_decode_value_as_handle")?;
                 let result = self.builder.build_call(
                     decode_fn,
                     &[encoded_int.into()],
                     "decoded_handle",
                 )?;
-                Ok(Some(result.try_as_basic_value().left().unwrap()))
+                result.try_as_basic_value().left().unwrap()
             }
-        }
+        };
+        
+        Ok(Some(decoded_value))
     }
     
     #[allow(dead_code)]
