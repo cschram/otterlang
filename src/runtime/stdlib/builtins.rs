@@ -878,7 +878,7 @@ pub extern "C" fn otter_builtin_iter_free_array(iter_handle: u64) {
 ///
 /// This function is unsafe because it dereferences a raw pointer.
 /// The caller must ensure that `ptr` points to a valid null-terminated string.
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub unsafe extern "C" fn otter_builtin_iter_string(ptr: *const c_char) -> u64 {
     let s = unsafe { CStr::from_ptr(ptr).to_string_lossy().into_owned() };
     let id = next_handle_id();
@@ -887,7 +887,7 @@ pub unsafe extern "C" fn otter_builtin_iter_string(ptr: *const c_char) -> u64 {
     id
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn otter_builtin_iter_has_next_string(iter_handle: u64) -> bool {
     let iterators = STRING_ITERATORS.read();
     if let Some(iter) = iterators.get(&iter_handle) {
@@ -897,7 +897,7 @@ pub extern "C" fn otter_builtin_iter_has_next_string(iter_handle: u64) -> bool {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn otter_builtin_iter_next_string(iter_handle: u64) -> u64 {
     let mut iterators = STRING_ITERATORS.write();
     if let Some(iter) = iterators.get_mut(&iter_handle) {
@@ -916,7 +916,7 @@ pub extern "C" fn otter_builtin_iter_next_string(iter_handle: u64) -> u64 {
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn otter_builtin_iter_free_string(iter_handle: u64) {
     STRING_ITERATORS.write().remove(&iter_handle);
 }
@@ -1949,7 +1949,7 @@ unsafe extern "C" {
 
 // This main function is only for FFI-compiled programs, not for the binaries
 #[cfg(feature = "ffi-main")]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn main(_argc: i32, _argv: *const *const c_char) -> i32 {
     unsafe {
         otter_entry();
