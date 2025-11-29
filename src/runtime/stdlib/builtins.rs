@@ -1303,47 +1303,6 @@ pub extern "C" fn otter_builtin_stringify_map(handle: u64) -> *mut c_char {
 // For now, implements a simple select that tries channels in order
 // ============================================================================
 
-#[repr(C)]
-pub struct SelectCase {
-    channel: u64,
-    is_send: bool,
-    value: *const c_char, // For send operations
-}
-
-/// Creates a new instance of `SelectCase`
-///
-/// # Safety
-///
-/// this function dereferences a raw pointer
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn otter_builtin_select_case_create(
-    channel: u64,
-    is_send: bool,
-    value: *const c_char,
-) -> *mut SelectCase {
-    let case = Box::new(SelectCase {
-        channel,
-        is_send,
-        value,
-    });
-    Box::into_raw(case)
-}
-
-/// frees an instance of `SelectCase`
-///
-/// # Safety
-///
-/// this function dereferences a raw pointer
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn otter_builtin_select_case_free(case: *mut SelectCase) {
-    if !case.is_null() {
-        // Safety:
-        // `SelectCase` is
-        //  * Only freed by this function;
-        //  * only created using the global allocator;
-        unsafe { drop(Box::from_raw(case)) };
-    }
-}
 
 /// Iterates through all cases pointed to by `cases`, if the case is send, we
 /// send data to it, otherwise, try to receive data from it
