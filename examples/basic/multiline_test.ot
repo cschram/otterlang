@@ -1,6 +1,6 @@
 fn main():
     # Test regular \n escape sequence (already supported)
-    print("Line 1\nLine 2\nLine 3")
+    println("Line 1\nLine 2\nLine 3")
     
     # Test multi-line string with actual newlines
     let multiline = """
@@ -8,12 +8,12 @@ This is a
 multi-line string
 with actual newlines!
 """
-    print(multiline)
+    println(multiline)
     
     # Test multi-line string with quotes inside
     let with_quotes = """
 This string has "quotes" inside
 and it works fine!
 """
-    print(with_quotes)
+    println(with_quotes)
 

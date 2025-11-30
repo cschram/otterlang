@@ -12,33 +12,33 @@ fn risky_operation(value: float) -> Result<float, string>:
     return Result.Ok(value * 2.0)
 
 fn main():
-    print("Advanced Error Handling")
-    print("======================")
+    println("Advanced Error Handling")
+    println("======================")
 
-    print("Testing basic operations:")
+    println("Testing basic operations:")
     match risky_operation(5.0):
         case Result.Ok(result):
-            print("Success: 5 processed")
+            println("Success: 5 processed")
         case Result.Err(error):
-            print("Failed on valid input")
-    print("Finished testing valid input")
+            println("Failed on valid input")
+    println("Finished testing valid input")
 
     match risky_operation(-1.0):
         case Result.Ok(result):
-            print("Success: -1 processed")
+            println("Success: -1 processed")
         case Result.Err(error):
-            print("Failed on negative input (expected)")
-    print("Finished testing negative input")
+            println("Failed on negative input (expected)")
+    println("Finished testing negative input")
 
-    print("")
-    print("Nested error handling:")
+    println("")
+    println("Nested error handling:")
     match risky_operation(-1.0):
         case Result.Ok(_):
             pass
         case Result.Err(inner_error):
-            print("Caught inner error")
+            println("Caught inner error")
             match risky_operation(0.0):
                 case Result.Ok(_):
                     pass
                 case Result.Err(outer_error):
-                    print("Caught outer error")
+                    println("Caught outer error")

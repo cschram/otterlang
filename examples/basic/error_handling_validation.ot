@@ -28,49 +28,49 @@ fn process_users() -> list<str>:
     match validate_user("Alice", "alice@example.com", "25"):
         case Result.Ok(result):
             valid_users.append("Alice")
-            print("✓ User Alice validated successfully")
+            println("✓ User Alice validated successfully")
         case Result.Err(error):
-            print("✗ Validation failed: error occurred")
-    print("Processed user: Alice")
+            println("✗ Validation failed: error occurred")
+    println("Processed user: Alice")
     
     match validate_user("Bob", "invalid-email", "17"):
         case Result.Ok(result):
             valid_users.append("Bob")
-            print("✓ User Bob validated successfully")
+            println("✓ User Bob validated successfully")
         case Result.Err(error):
-            print("✗ Validation failed: error occurred")
-    print("Processed user: Bob")
+            println("✗ Validation failed: error occurred")
+    println("Processed user: Bob")
     return valid_users
 
 fn safe_api_call(endpoint: str, should_fail: bool) -> Result<str, string>:
-    print(f"Calling API: {endpoint}")
+    println(f"Calling API: {endpoint}")
     if should_fail:
         return Result.Err("API call failed")
     return Result.Ok(f"Response from {endpoint}")
 
 fn api_processing_demo():
-    print("API Processing with Error Handling")
-    print("=================================")
+    println("API Processing with Error Handling")
+    println("=================================")
     match safe_api_call("/users", false):
         case Result.Ok(response):
-            print(f"✓ API call successful: {response}")
-            print("✓ No errors in API call")
+            println(f"✓ API call successful: {response}")
+            println("✓ No errors in API call")
         case Result.Err(error):
-            print("✗ API call failed: error occurred")
-    print("✓ Completed API call")
+            println("✗ API call failed: error occurred")
+    println("✓ Completed API call")
     
     match safe_api_call("/invalid", true):
         case Result.Ok(response):
-            print(f"✓ API call successful: {response}")
-            print("✓ No errors in API call")
+            println(f"✓ API call successful: {response}")
+            println("✓ No errors in API call")
         case Result.Err(error):
-            print("✗ API call failed: error occurred")
-    print("✓ Completed API call")
+            println("✗ API call failed: error occurred")
+    println("✓ Completed API call")
 
 fn main():
-    print("Error Handling - Data Validation & APIs")
-    print("======================================")
+    println("Error Handling - Data Validation & APIs")
+    println("======================================")
     let valid_users = process_users()
-    print(f"Successfully validated users count: {len(valid_users)}")
+    println(f"Successfully validated users count: {len(valid_users)}")
     println("")
     api_processing_demo()

@@ -5,4 +5,4 @@ fn fibonacci(n: float) -> float:
 
 fn main():
     let result = fibonacci(10.0)
-    print("Fibonacci calculation done")
+    println("Fibonacci calculation done")

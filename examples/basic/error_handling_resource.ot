@@ -3,52 +3,52 @@ enum Result<T, E>:
     Err: (E)
 
 fn simulate_operation(name: str, should_fail: bool) -> Result<str, string>:
-    print(f"Starting operation: {name}")
+    println(f"Starting operation: {name}")
     if should_fail:
         return Result.Err("Operation failed")
     let result = f"Result of {name}"
-    print(f"Successfully completed: {result}")
+    println(f"Successfully completed: {result}")
     return Result.Ok(result)
 
 fn demonstrate_cleanup():
-    print("Demonstrating Cleanup Patterns")
-    print("=============================")
+    println("Demonstrating Cleanup Patterns")
+    println("=============================")
     # Simulate finally with explicit cleanup after match
     match simulate_operation("task1", false):
         case Result.Ok(result):
-            print(f"Got result: {result}")
+            println(f"Got result: {result}")
         case Result.Err(error):
-            print("Operation failed: error occurred")
-    print("Cleaning up after task1")
+            println("Operation failed: error occurred")
+    println("Cleaning up after task1")
     
     match simulate_operation("task2", true):
         case Result.Ok(result):
-            print(f"Got result: {result}")
+            println(f"Got result: {result}")
         case Result.Err(error):
-            print("Operation failed: error occurred")
-    print("Cleaning up after task2")
+            println("Operation failed: error occurred")
+    println("Cleaning up after task2")
 
 fn resource_management_demo():
-    print("Resource Management with Cleanup")
-    print("=================================")
-    print("Acquiring resource: Database")
-    print("Acquiring resource: Network")
-    print("Acquiring resource: File")
+    println("Resource Management with Cleanup")
+    println("=================================")
+    println("Acquiring resource: Database")
+    println("Acquiring resource: Network")
+    println("Acquiring resource: File")
     
     match simulate_operation("processing", true):
         case Result.Ok(_):
-            print("All operations completed successfully")
+            println("All operations completed successfully")
         case Result.Err(error):
-            print("Operation failed: error occurred")
+            println("Operation failed: error occurred")
     
     # Cleanup always happens
-    print("Releasing resource: Database")
-    print("Releasing resource: Network")
-    print("Releasing resource: File")
+    println("Releasing resource: Database")
+    println("Releasing resource: Network")
+    println("Releasing resource: File")
 
 fn main():
-    print("Error Handling - Resource Management")
-    print("====================================")
+    println("Error Handling - Resource Management")
+    println("====================================")
     demonstrate_cleanup()
     println("")
     resource_management_demo()

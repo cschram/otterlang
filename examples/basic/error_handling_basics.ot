@@ -16,12 +16,12 @@ fn safe_divide(x: float, y: float) -> Option<float>:
             return Option.None
 
 fn main():
-    print("Error Handling Basics")
-    print("====================")
+    println("Error Handling Basics")
+    println("====================")
     let result1 = safe_divide(10.0, 2.0)
     match result1:
         case Option.Some(_):
-            print("Division by valid numbers works")
+            println("Division by valid numbers works")
         case Option.None:
             pass
     let result2 = safe_divide(10.0, 0.0)
@@ -29,4 +29,4 @@ fn main():
         case Option.Some(_):
             pass
         case Option.None:
-            print("Division by zero handled gracefully")
+            println("Division by zero handled gracefully")

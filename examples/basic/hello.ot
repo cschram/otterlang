@@ -6,5 +6,5 @@ fn sqrt_approx(n: float, guess: float) -> float:
 
 fn main():
     let result = sqrt_approx(25.0, 5.0)
-    print("Square root approximation of 25.0: 5.0")
-    print("Computation completed successfully!")
+    println("Square root approximation of 25.0: 5.0")
+    println("Computation completed successfully!")

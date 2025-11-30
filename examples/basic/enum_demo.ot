@@ -7,8 +7,8 @@ enum Result<T, E>:
     Err: (E)
 
 fn main():
-    print("OtterLang Enum Demo")
-    print("===================")
+    println("OtterLang Enum Demo")
+    println("===================")
 
     # Create some enum values (type checking works)
     let maybe_some = Option.Some(42.0)
@@ -29,25 +29,25 @@ fn main():
         case Result.Err(_):
             "failure"
 
-    print("Enum types and match expressions work!")
-    print(f"Result1: {result1}")
-    print(f"Result2: {result2}")
+    println("Enum types and match expressions work!")
+    println(f"Result1: {result1}")
+    println(f"Result2: {result2}")
 
     test_iteration()
 
 fn test_iteration():
-    print("Testing collection iteration:")
+    println("Testing collection iteration:")
 
     # Test list iteration
     let my_list = [1, 2, 3, 4, 5]
     let sum = 0
     for num in my_list:
         sum = sum + num
-    print(f"Sum of [1,2,3,4,5] = {sum}")
+    println(f"Sum of [1,2,3,4,5] = {sum}")
 
     # Test string iteration
     let text = "hello"
     let chars = []
     for char in text:
         chars.append(char)
-    print(f"Characters in 'hello': {chars}")
+    println(f"Characters in 'hello': {chars}")

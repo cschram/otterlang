@@ -74,12 +74,6 @@ fn ensure_runtime_library() -> Result<PathBuf> {
     let runtime_lib_dir = Path::new(&manifest_dir).join("target").join("runtime");
     let runtime_lib = runtime_lib_dir.join("libotterlang_runtime.a");
 
-    // Check if library already exists and is up-to-date
-    if runtime_lib.exists() {
-        // For now, assume it's up-to-date. In production, we'd check timestamps
-        return Ok(runtime_lib);
-    }
-
     // Create runtime library directory
     fs::create_dir_all(&runtime_lib_dir).context("failed to create runtime library directory")?;
 
@@ -450,9 +444,9 @@ pub fn build_executable(
         }
     }
 
-    // Add -v flag to see full linker invocation for debugging
-    // Uncomment the line below to see verbose linker output
-    // cc.arg("-v");
+    if std::env::var_os("OTTER_LINK_VERBOSE").is_some() {
+        cc.arg("-v");
+    }
 
     let status = cc.status().context("failed to invoke system linker (cc)")?;
 
