@@ -1037,6 +1037,15 @@ impl TypeChecker {
                     TypeInfo::List(elem) => elem.as_ref().clone(),
                     TypeInfo::Dict { value, .. } => value.as_ref().clone(),
                     TypeInfo::Str => TypeInfo::Str,
+                    TypeInfo::Range(start, end) => {
+                        if matches!(start.as_ref(), TypeInfo::I64)
+                            || matches!(end.as_ref(), TypeInfo::I64)
+                        {
+                            TypeInfo::I64
+                        } else {
+                            TypeInfo::I32
+                        }
+                    }
                     _ => {
                         self.errors.push(
                             TypeError::new(format!(
@@ -1634,12 +1643,12 @@ impl TypeChecker {
                     let start_type = self.infer_expr_type(start)?;
                     let end_type = self.infer_expr_type(end)?;
 
-                    if start_type.is_compatible_with(&end_type) {
-                        Ok(TypeInfo::Unknown) // Ranges are used for iteration
+                    if start_type.is_integer() && end_type.is_integer() {
+                        Ok(TypeInfo::Range(Box::new(start_type), Box::new(end_type)))
                     } else {
                         self.errors.push(
                             TypeError::new(format!(
-                                "range bounds must have compatible types, got {} and {}",
+                                "range bounds must be integers, got {} and {}",
                                 start_type.display_name(),
                                 end_type.display_name()
                             ))

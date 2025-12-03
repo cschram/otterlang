@@ -27,6 +27,8 @@ pub enum TypeInfo {
         key: Box<TypeInfo>,
         value: Box<TypeInfo>,
     },
+    /// Range iterable type
+    Range(Box<TypeInfo>, Box<TypeInfo>),
     /// Function type with parameter and return types
     Function {
         params: Vec<TypeInfo>,
@@ -320,6 +322,9 @@ impl TypeInfo {
             TypeInfo::Dict { key, value } => {
                 format!("dict<{}, {}>", key.display_name(), value.display_name())
             }
+            TypeInfo::Range(start, end) => {
+                format!("range<{}, {}>", start.display_name(), end.display_name())
+            }
             TypeInfo::Generic { base, args } => {
                 if args.is_empty() {
                     base.clone()
@@ -361,6 +366,11 @@ impl TypeInfo {
             TypeInfo::Error => "<error>".to_string(),
             TypeInfo::Module(name) => format!("module<{}>", name),
         }
+    }
+
+    /// Check if the type is an integer type (i32 or i64)
+    pub fn is_integer(&self) -> bool {
+        matches!(self, TypeInfo::I32 | TypeInfo::I64)
     }
 }
 
