@@ -1,11 +1,18 @@
+//! AST visitor implementation.
+
 use crate::nodes::*;
 
 /// A read-only AST visitor.
 pub trait Visitor {
+    /// Visit a statement node.
     fn visit_statement(&mut self, _stmt: &Node<Statement>) {}
+    /// Visit an expression node.
     fn visit_expression(&mut self, _expr: &Node<Expr>) {}
+    /// Visit a block node.
     fn visit_block(&mut self, _block: &Node<Block>) {}
+    /// Visit a function node.
     fn visit_function(&mut self, _func: &Node<Function>) {}
+    /// Visit a pattern node.
     fn visit_pattern(&mut self, _pattern: &Node<Pattern>) {}
 }
 
@@ -205,6 +212,221 @@ fn visit_pattern(pattern: &Node<Pattern>, visitor: &mut impl Visitor) {
         Pattern::Array { patterns, .. } => {
             for pattern in patterns {
                 visit_pattern(pattern, visitor);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// A mutable AST visitor.
+pub trait VisitorMut {
+    /// Visit a statement node.
+    fn visit_statement(&mut self, _stmt: &mut Node<Statement>) {}
+    /// Visit an expression node.
+    fn visit_expression(&mut self, _expr: &mut Node<Expr>) {}
+    /// Visit a block node.
+    fn visit_block(&mut self, _block: &mut Node<Block>) {}
+    /// Visit a function node.
+    fn visit_function(&mut self, _func: &mut Node<Function>) {}
+    /// Visit a pattern node.
+    fn visit_pattern(&mut self, _pattern: &mut Node<Pattern>) {}
+}
+/// Mutably traverse the AST using a visitor.
+pub fn visit_mut(program: &mut Program, visitor: &mut impl VisitorMut) {
+    for stmt in &mut program.statements {
+        visit_statement_mut(stmt, visitor);
+    }
+}
+
+fn visit_statement_mut(stmt: &mut Node<Statement>, visitor: &mut impl VisitorMut) {
+    visitor.visit_statement(stmt);
+    match stmt.as_mut() {
+        Statement::Let { expr, .. } => {
+            visit_expression_mut(expr, visitor);
+        }
+        Statement::Assignment { expr, .. } => {
+            visit_expression_mut(expr, visitor);
+        }
+        Statement::If {
+            cond,
+            then_block,
+            elif_blocks,
+            else_block,
+        } => {
+            visitor.visit_expression(cond);
+            visit_block_mut(then_block, visitor);
+            for (elif_cond, elif_block) in elif_blocks {
+                visit_expression_mut(elif_cond, visitor);
+                visit_block_mut(elif_block, visitor);
+            }
+            if let Some(else_blk) = else_block {
+                visit_block_mut(else_blk, visitor);
+            }
+        }
+        Statement::For { iterable, body, .. } => {
+            visit_expression_mut(iterable, visitor);
+            visit_block_mut(body, visitor);
+        }
+        Statement::While { cond, body } => {
+            visit_expression_mut(cond, visitor);
+            visit_block_mut(body, visitor);
+        }
+        Statement::Return(Some(expr)) => {
+            visit_expression_mut(expr, visitor);
+        }
+        Statement::Struct { methods, .. } => {
+            for method in methods {
+                visit_function_mut(method, visitor);
+            }
+        }
+        Statement::Expr(expr) => {
+            visit_expression_mut(expr, visitor);
+        }
+        Statement::Block(block) => {
+            visit_block_mut(block, visitor);
+        }
+        _ => {}
+    }
+}
+
+fn visit_expression_mut(expr: &mut Node<Expr>, visitor: &mut impl VisitorMut) {
+    visitor.visit_expression(expr);
+    match expr.as_mut() {
+        Expr::Member { object, .. } => {
+            visit_expression_mut(object, visitor);
+        }
+        Expr::Call { func, args } => {
+            visit_expression_mut(func, visitor);
+            for arg in args {
+                visit_expression_mut(arg, visitor);
+            }
+        }
+        Expr::Binary { left, right, .. } => {
+            visit_expression_mut(left, visitor);
+            visit_expression_mut(right, visitor);
+        }
+        Expr::Unary { expr, .. } => {
+            visit_expression_mut(expr, visitor);
+        }
+        Expr::If {
+            cond,
+            then_branch,
+            else_branch,
+        } => {
+            visit_expression_mut(cond, visitor);
+            visit_expression_mut(then_branch, visitor);
+            if let Some(else_expr) = else_branch {
+                visit_expression_mut(else_expr, visitor);
+            }
+        }
+        Expr::Match { value, arms } => {
+            visit_expression_mut(value, visitor);
+            for arm in arms {
+                visit_pattern_mut(&mut arm.as_mut().pattern, visitor);
+                if let Some(guard_expr) = &mut arm.as_mut().guard {
+                    visit_expression_mut(guard_expr, visitor);
+                }
+                visit_block_mut(&mut arm.as_mut().body, visitor);
+            }
+        }
+        Expr::Range { start, end } => {
+            visit_expression_mut(start, visitor);
+            visit_expression_mut(end, visitor);
+        }
+        Expr::Array(elements) => {
+            for element in elements {
+                visit_expression_mut(element, visitor);
+            }
+        }
+        Expr::Dict(pairs) => {
+            for (key, value) in pairs {
+                visit_expression_mut(key, visitor);
+                visit_expression_mut(value, visitor);
+            }
+        }
+        Expr::ListComprehension {
+            element,
+            iterable,
+            condition,
+            ..
+        } => {
+            visit_expression_mut(element, visitor);
+            visit_expression_mut(iterable, visitor);
+            if let Some(cond) = condition {
+                visit_expression_mut(cond, visitor);
+            }
+        }
+        Expr::DictComprehension {
+            key,
+            value,
+            iterable,
+            condition,
+            ..
+        } => {
+            visit_expression_mut(key, visitor);
+            visit_expression_mut(value, visitor);
+            visit_expression_mut(iterable, visitor);
+            if let Some(cond) = condition {
+                visit_expression_mut(cond, visitor);
+            }
+        }
+        Expr::FString { parts } => {
+            for part in parts {
+                if let FStringPart::Expr(expr) = part.as_mut() {
+                    visit_expression_mut(expr, visitor);
+                }
+            }
+        }
+        Expr::Await(expr) => {
+            visit_expression_mut(expr, visitor);
+        }
+        Expr::Spawn(expr) => {
+            visit_expression_mut(expr, visitor);
+        }
+        Expr::Struct { fields, .. } => {
+            for (_, expr) in fields {
+                visit_expression_mut(expr, visitor);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn visit_block_mut(block: &mut Node<Block>, visitor: &mut impl VisitorMut) {
+    visitor.visit_block(block);
+    for stmt in &mut block.as_mut().statements {
+        visit_statement_mut(stmt, visitor);
+    }
+}
+
+fn visit_function_mut(func: &mut Node<Function>, visitor: &mut impl VisitorMut) {
+    visitor.visit_function(func);
+    for param in &mut func.as_mut().params {
+        if let Some(default_expr) = &mut param.as_mut().default {
+            visit_expression_mut(default_expr, visitor);
+        }
+    }
+    visit_block_mut(&mut func.as_mut().body, visitor);
+}
+
+fn visit_pattern_mut(pattern: &mut Node<Pattern>, visitor: &mut impl VisitorMut) {
+    visitor.visit_pattern(pattern);
+    match pattern.as_mut() {
+        Pattern::EnumVariant { fields, .. } => {
+            for field_pattern in fields {
+                visit_pattern_mut(field_pattern, visitor);
+            }
+        }
+        Pattern::Struct { fields, .. } => {
+            for (_, pattern) in fields {
+                if let Some(pattern) = pattern {
+                    visit_pattern_mut(pattern, visitor);
+                }
+            }
+        }
+        Pattern::Array { patterns, .. } => {
+            for pattern in patterns {
+                visit_pattern_mut(pattern, visitor);
             }
         }
         _ => {}
