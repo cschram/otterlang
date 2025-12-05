@@ -196,7 +196,7 @@ pub extern "C" fn otter_runtime_stats() -> *mut c_char {
     let memory_bytes = stats.heap_bytes;
 
     #[cfg_attr(not(feature = "task-runtime"), allow(unused_mut))]
-    let mut fields = [
+    let mut fields = vec![
         format!("\"gos\":{}", active_gos),
         format!("\"cpu_count\":{}", cpu_count),
         format!("\"memory_bytes\":{}", memory_bytes),

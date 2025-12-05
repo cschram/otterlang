@@ -120,23 +120,29 @@ fn create_condvar_waker(pair: Arc<(Mutex<bool>, Condvar)>) -> Waker {
     }
 
     unsafe fn wake(data: *const ()) {
-        let pair = Arc::from_raw(data as *const Arc<(Mutex<bool>, Condvar)>);
-        *pair.0.lock() = true;
-        pair.1.notify_all();
+        unsafe {
+            let pair = Arc::from_raw(data as *const Arc<(Mutex<bool>, Condvar)>);
+            *pair.0.lock() = true;
+            pair.1.notify_all();
+        }
     }
 
     unsafe fn wake_by_ref(data: *const ()) {
         // For wake_by_ref, we need to use the Arc without consuming it
         // So we'll clone it first
-        let pair = Arc::from_raw(data as *const Arc<(Mutex<bool>, Condvar)>);
-        let pair_clone = Arc::clone(&pair);
-        std::mem::forget(pair); // Don't drop the original
-        *pair_clone.0.lock() = true;
-        pair_clone.1.notify_all();
+        unsafe {
+            let pair = Arc::from_raw(data as *const Arc<(Mutex<bool>, Condvar)>);
+            let pair_clone = Arc::clone(&pair);
+            std::mem::forget(pair); // Don't drop the original
+            *pair_clone.0.lock() = true;
+            pair_clone.1.notify_all();
+        }
     }
 
     unsafe fn drop(data: *const ()) {
-        let _ = Arc::from_raw(data as *const Arc<(Mutex<bool>, Condvar)>);
+        unsafe {
+            let _ = Arc::from_raw(data as *const Arc<(Mutex<bool>, Condvar)>);
+        }
     }
 
     static VTABLE: RawWakerVTable = RawWakerVTable::new(clone, wake, wake_by_ref, drop);
@@ -390,11 +396,11 @@ pub unsafe extern "C" fn otter_builtin_select(
             for case in cases_slice.iter() {
                 if !case.is_send {
                     if let Some(wrapper) = STRING_CHANNELS.lock().get(&case.channel) {
-                        wrapper.channel.channel.register_waker(&waker);
+                        wrapper.channel.register_waker(&waker);
                     } else if let Some(wrapper) = INT_CHANNELS.lock().get(&case.channel) {
-                        wrapper.channel.channel.register_waker(&waker);
+                        wrapper.channel.register_waker(&waker);
                     } else if let Some(wrapper) = FLOAT_CHANNELS.lock().get(&case.channel) {
-                        wrapper.channel.channel.register_waker(&waker);
+                        wrapper.channel.register_waker(&waker);
                     }
                 }
             }
