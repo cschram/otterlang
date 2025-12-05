@@ -58,3 +58,6 @@ ffi/*/target/
 # .deb build artifacts
 package/otterlang
 package/otterlang.deb
+
+# Example build artifacts
+examples/**/target/
