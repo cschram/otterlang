@@ -1,4 +1,4 @@
-use ast::nodes::{Block, Expr, Function, Statement};
+use otterc_ast::nodes::{Block, Expr, Function, Statement};
 
 /// Builds call graph for optimization
 pub struct CallGraph {

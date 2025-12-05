@@ -4,7 +4,7 @@ use crate::runtime::ffi;
 use crate::runtime::jit::executor::JitExecutor;
 use crate::runtime::symbol_registry::SymbolRegistry;
 use crate::typecheck::TypeChecker;
-use ast::nodes::{Block, Expr, Function, Node, Program, Statement};
+use otterc_ast::nodes::{Block, Expr, Function, Node, Program, Statement};
 use common::Span;
 use lexer::tokenize;
 use parser::parse;

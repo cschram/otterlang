@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use glob::glob;
 use std::path::{Path, PathBuf};
 
-use ast::nodes::{Function, Statement};
+use otterc_ast::nodes::{Function, Statement};
 use lexer::tokenize;
 use parser::parse;
 

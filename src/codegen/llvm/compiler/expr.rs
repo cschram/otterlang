@@ -7,7 +7,7 @@ use inkwell::values::{BasicMetadataValueEnum, BasicValueEnum, FunctionValue, Int
 use crate::codegen::llvm::compiler::Compiler;
 use crate::codegen::llvm::compiler::types::{EvaluatedValue, FunctionContext, OtterType};
 use crate::typecheck::TypeInfo;
-use ast::nodes::{BinaryOp, Block, Expr, Literal, Node, Statement, UnaryOp};
+use otterc_ast::nodes::{BinaryOp, Block, Expr, Literal, Node, Statement, UnaryOp};
 
 impl<'ctx> Compiler<'ctx> {
     pub(crate) fn eval_expr(
@@ -279,7 +279,7 @@ impl<'ctx> Compiler<'ctx> {
         fail_bb: inkwell::basic_block::BasicBlock<'ctx>,
         ctx: &mut FunctionContext<'ctx>,
     ) -> Result<()> {
-        use ast::nodes::Pattern;
+        use otterc_ast::nodes::Pattern;
 
         match pattern.as_ref() {
             Pattern::Wildcard => {

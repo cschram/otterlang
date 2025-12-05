@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
-use ast::nodes::{Program, Statement};
+use otterc_ast::nodes::{Program, Statement};
 use ffi::{BridgeSymbolRegistry, CargoBridge, DynamicLibraryLoader, FunctionSpec, TypeSpec};
 use libloading::Library;
 

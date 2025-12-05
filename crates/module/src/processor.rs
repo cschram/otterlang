@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::{Module, ModuleLoader, ModulePath, ModuleResolver};
-use ast::nodes::{Program, Statement};
+use otterc_ast::nodes::{Program, Statement};
 const DEFAULT_MODULES: &[&str] = &["otter:core"];
 
 const VIRTUAL_STDLIB_MODULES: &[&str] = &[

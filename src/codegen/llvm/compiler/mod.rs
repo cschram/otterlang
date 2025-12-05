@@ -14,7 +14,7 @@ use inkwell::values::{FunctionValue, PointerValue};
 use crate::codegen::llvm::bridges::prepare_rust_bridges;
 use crate::runtime::symbol_registry::SymbolRegistry;
 use crate::typecheck::{EnumLayout, TypeInfo};
-use ast::nodes::{Expr, Node, Program, Statement};
+use otterc_ast::nodes::{Expr, Node, Program, Statement};
 
 pub mod expr;
 pub mod stmt;

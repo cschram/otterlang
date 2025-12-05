@@ -8,7 +8,7 @@ use tower_lsp::{Client, LanguageServer, LspService, Server};
 
 use crate::runtime::symbol_registry::SymbolRegistry;
 use crate::typecheck::{self, TypeChecker};
-use ast::nodes::{Expr, Function, Node, Program, Statement, Type};
+use otterc_ast::nodes::{Expr, Function, Node, Program, Statement, Type};
 use common::Span;
 use lexer::{LexerError, Token, tokenize};
 use parser::parse;

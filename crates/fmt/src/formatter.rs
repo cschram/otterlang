@@ -1,4 +1,4 @@
-use ast::nodes::{
+use otterc_ast::nodes::{
     BinaryOp, Block, Expr, FStringPart, Function, Literal, Node, Pattern, Program, Statement, Type,
     UnaryOp,
 };

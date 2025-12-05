@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use anyhow::{Context, Result, anyhow, bail};
-use ast::nodes::Program;
+use otterc_ast::nodes::Program;
 use inkwell::OptimizationLevel;
 use inkwell::context::Context as LlvmContext;
 use inkwell::targets::{CodeModel, FileType, InitializationConfig, RelocMode, Target};

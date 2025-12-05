@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::resolver::ModuleResolver;
-use ast::nodes::{Program, Statement};
+use otterc_ast::nodes::{Program, Statement};
 use lexer::tokenize;
 use parser::parse;
 

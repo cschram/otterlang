@@ -961,7 +961,7 @@ fn register_rust_ffi_functions_for_typecheck(
 fn collect_rust_imports_for_typecheck(
     program: &ast::nodes::Program,
 ) -> HashMap<String, HashSet<String>> {
-    use ast::nodes::Statement;
+    use otterc_ast::nodes::Statement;
     let mut imports: HashMap<String, HashSet<String>> = HashMap::new();
 
     for statement in &program.statements {

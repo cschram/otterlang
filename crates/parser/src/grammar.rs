@@ -1,7 +1,7 @@
 use chumsky::Stream;
 use chumsky::prelude::*;
 
-use ast::nodes::{
+use otterc_ast::nodes::{
     BinaryOp, Block, EnumVariant, Expr, FStringPart, Function, Literal, MatchArm, Node,
     NumberLiteral, Param, Pattern, Program, Statement, Type, UnaryOp, UseImport,
 };

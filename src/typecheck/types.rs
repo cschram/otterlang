@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use ast::nodes::{EnumVariant, Node, Type};
 use common::Span;
+use otterc_ast::nodes::{EnumVariant, Node, Type};
 
 use language::LanguageFeatureFlags;
 
