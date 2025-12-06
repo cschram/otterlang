@@ -7,6 +7,8 @@ use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use tracing::{debug, info, warn};
 
+const TASK_RUNTIME_ENABLED: bool = cfg!(feature = "task-runtime");
+
 use crate::codegen::{
     self, BuildArtifact, CodegenOptLevel, CodegenOptions, TargetTriple, build_executable,
 };
@@ -142,6 +144,7 @@ pub fn run() -> Result<()> {
     maybe_auto_update()?;
     ffi::bootstrap_stdlib();
     let cli = OtterCli::parse();
+    enforce_task_runtime_flags(&cli)?;
 
     match &cli.command {
         Command::Run { path } => handle_run(&cli, path),
@@ -159,6 +162,20 @@ pub fn run() -> Result<()> {
             update_snapshots,
         } => handle_test(&cli, paths, *parallel, *verbose, *update_snapshots),
     }
+}
+
+fn enforce_task_runtime_flags(cli: &OtterCli) -> Result<()> {
+    if TASK_RUNTIME_ENABLED {
+        return Ok(());
+    }
+
+    if cli.tasks || cli.tasks_debug || cli.tasks_trace {
+        bail!(
+            "task runtime diagnostics require building otterlang with the 'task-runtime' feature (try `cargo run --features task-runtime -- ...`)."
+        );
+    }
+
+    Ok(())
 }
 
 fn maybe_auto_update() -> Result<()> {
