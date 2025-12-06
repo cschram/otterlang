@@ -1505,6 +1505,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "otterc_ty"
+version = "0.1.0"
+dependencies = [
+ "otterc_symbol",
+]
+
+[[package]]
 name = "otterc_typecheck"
 version = "0.1.0"
 dependencies = [
