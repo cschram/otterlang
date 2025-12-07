@@ -7,6 +7,14 @@
 
 <h1 align="center">OtterLang</h1>
 
+<h3 align="center">
+  <a href="docs/ROADMAP.md"><b>Roadmap</b></a>
+  &nbsp;&#183;&nbsp;
+  <a href="docs/GETTING_STARTED.md"><b>Getting Started</b></a>
+  &nbsp;&#183;&nbsp;
+  <a href="docs/EXAMPLES.md"><b>Examples</b></a>
+</h3>
+
 <div align="center">
   <strong>Simple syntax, native performance, transparent Rust FFI.</strong>
   <br><br>
@@ -35,14 +43,6 @@ OtterLang is an indentation-sensitive programming language with an LLVM backend 
 - *Drop-in Python replacement* – OtterLang has its own syntax and semantics
 - *New syntax proliferation* – We keep the language minimal and familiar
 - *Runtime interpreter* – OtterLang is a compiled language
-
-<h3 align="center">
-  <a href="docs/ROADMAP.md"><b>Roadmap</b></a>
-  &nbsp;&#183;&nbsp;
-  <a href="docs/GETTING_STARTED.md"><b>Getting Started</b></a>
-  &nbsp;&#183;&nbsp;
-  <a href="docs/EXAMPLES.md"><b>Examples</b></a>
-</h3>
 
 <h1 align="center">Quick Start</h1>
 
