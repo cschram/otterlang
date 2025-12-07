@@ -89,7 +89,7 @@ otter repl                      # Interactive REPL
 otter test path/to/tests        # Run snapshot-style tests
 ```
 
-Cross-compilation targets (including WebAssembly) are described in [docs/WEBASSEMBLY.md](docs/WEBASSEMBLY.md).
+Cross-compilation targets (including WebAssembly) are described in the [Getting Started Guide](docs/GETTING_STARTED.md#building-executables).
 
 <h1 align="center">Examples</h1>
 
@@ -113,7 +113,6 @@ We ship a VS Code extension with syntax highlighting, snippets, diagnostics, and
 
 **[API Reference](docs/API_REFERENCE.md)** – stdlib module documentation.
 
-**[WebAssembly](docs/WEBASSEMBLY.md)** – compiling OtterLang programs to WASM targets.
 
 </div>
 
@@ -125,7 +124,7 @@ We ship a VS Code extension with syntax highlighting, snippets, diagnostics, and
 
 - `match` arms do not support guard clauses (`case value if ...`) yet; only direct patterns are accepted.
 - Transparent Rust FFI exposes functions and methods, but macros/proc-macros are ignored and structs/enums cross the boundary as opaque handles (see [FFI Guide](docs/FFI_GUIDE.md#limitations)).
-- WebAssembly builds run without filesystem access or full FFI support, so many stdlib modules (`io`, `net`, `task`) are unavailable in that target ([details](docs/WEBASSEMBLY.md#limitations)).
+- WebAssembly builds run without filesystem access or full FFI support, so many stdlib modules (`io`, `net`, `task`) are unavailable in that target. See the [Getting Started Guide](docs/GETTING_STARTED.md#building-executables) for details.
 - Building the toolchain currently requires LLVM 18 and Rust nightly because the bridge generator depends on nightly-only rustdoc features.
 
 <h1 align="center">Contributing and License</h1>

@@ -9,6 +9,7 @@
   - [Using Nix (Recommended)](#using-nix-recommended)
   - [Manual Installation](#manual-installation)
   - [After Building](#after-building)
+    - [WebAssembly Targets](#webassembly-targets)
   - [Troubleshooting](#troubleshooting)
 - [Command Line Interface](#command-line-interface)
   - [Core Commands](#core-commands)
@@ -202,9 +203,54 @@ cargo +nightly run --release --bin otter -- run examples/basic/hello.ot
 ```bash
 # Build a standalone executable
 ./target/release/otter build examples/basic/hello.ot -o hello
+```
 
-# Build for WebAssembly
-./target/release/otter build program.ot --target wasm32-unknown-unknown -o program.wasm
+#### WebAssembly Targets
+
+OtterLang can compile programs to WebAssembly (WASM) for running in web browsers or other WASM runtimes.
+
+**Basic WebAssembly (no WASI):**
+```bash
+otter build program.ot --target wasm32-unknown-unknown -o program.wasm
+```
+
+**WebAssembly with WASI support:**
+```bash
+otter build program.ot --target wasm32-wasi -o program.wasm
+```
+
+**Target Differences:**
+
+- **`wasm32-wasi`** - WebAssembly System Interface
+  - Best for: Server-side WASM, command-line tools, WASI-compatible runtimes
+  - Full WASI support: Direct access to stdio, filesystem, networking, and other system APIs
+  - Runtime compatibility: Works in any WASI-compatible runtime (wasmtime, WasmEdge, etc.)
+
+- **`wasm32-unknown-unknown`** - Bare WebAssembly
+  - Best for: Web browsers, embedded systems, custom host environments
+  - Minimal imports: Only requires a few host functions for I/O
+  - Smaller binaries: No WASI runtime overhead
+  - Browser compatible: Can run directly in web browsers with appropriate host
+
+**Requirements:**
+- LLVM 18 with WebAssembly target support
+- `clang` and `wasm-ld` in your PATH (included with LLVM installations)
+
+**Limitations:**
+- Garbage Collection: WASM modules use OtterLang's built-in GC, which may have different performance characteristics than native execution
+- FFI: Foreign function interface is limited in WASM environments
+- File I/O: Direct filesystem access requires WASI or host-provided APIs
+- Concurrency: Task spawning works but may have limitations in constrained environments
+- Many stdlib modules (`io`, `net`, `task`) are unavailable in WASM targets
+
+**Examples:**
+```bash
+# Build examples for WebAssembly
+otter build examples/basic/hello.ot --target wasm32-unknown-unknown -o hello.wasm
+otter build examples/basic/fibonacci.ot --target wasm32-wasi -o fibonacci.wasm
+
+# Run with wasmtime (WASI)
+wasmtime fibonacci.wasm
 ```
 
 ### Testing
