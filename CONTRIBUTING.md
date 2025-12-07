@@ -4,12 +4,59 @@ Thank you for your interest in contributing to OtterLang! This guide will help y
 
 ## Development Setup
 
+### Getting the Source Code
+
+First, clone the OtterLang repository:
+
+```bash
+git clone https://github.com/jonathanmagambo/otterlang.git
+cd otterlang
+```
+
+### Installing Nix
+
+If you plan to use Nix (recommended), you'll need to install it first. Nix is a package manager that provides a reproducible development environment.
+
+#### macOS and Linux
+
+The easiest way to install Nix is using the official installer:
+
+```bash
+# Run the Nix installer
+sh <(curl -L https://nixos.org/nix/install) --daemon
+```
+
+After installation, restart your terminal or run:
+
+```bash
+. ~/.nix-profile/etc/profile.d/nix.sh
+```
+
+#### Windows
+
+On Windows, you can use Nix through WSL2 (Windows Subsystem for Linux) or use NixOS in a virtual machine. Alternatively, you can follow the manual installation instructions below.
+
+For more detailed installation instructions, visit the [official Nix installation guide](https://nixos.org/download.html).
+
+#### Verifying Nix Installation
+
+After installing Nix, verify it's working:
+
+```bash
+nix --version
+```
+
+You should see the Nix version number. If you encounter any issues, refer to the [Nix troubleshooting guide](https://nixos.org/manual/nix/stable/installation/installing-binary.html#troubleshooting).
+
 ### Option 1: Nix Development Environment (Recommended)
 
 The easiest way to get started is using the Nix development environment:
 
 ```bash
+# Enter the development environment
 nix develop
+
+# Build the compiler
 cargo +nightly build --release
 ```
 
@@ -31,41 +78,92 @@ If you prefer to set up the toolchain manually, follow these steps:
 **macOS**
 
 ```bash
+# Clone the repository (if you haven't already)
+git clone https://github.com/jonathanmagambo/otterlang.git
+cd otterlang
+
+# Install LLVM 18
 brew install llvm@18
+
+# Set environment variables
 export LLVM_SYS_181_PREFIX=$(brew --prefix llvm@18)
 export LLVM_SYS_180_PREFIX=$LLVM_SYS_181_PREFIX
 export PATH="$LLVM_SYS_181_PREFIX/bin:$PATH"
+
+# Install Rust nightly
+rustup toolchain install nightly
+
+# Build OtterLang
 cargo +nightly build --release
 ```
 
 **Ubuntu / Debian**
 
 ```bash
+# Clone the repository (if you haven't already)
+git clone https://github.com/jonathanmagambo/otterlang.git
+cd otterlang
+
+# Install LLVM 18
+sudo apt-get update
 sudo apt-get install -y llvm-18 llvm-18-dev clang-18
+
+# Set environment variables
 export LLVM_SYS_181_PREFIX=/usr/lib/llvm-18
 export LLVM_SYS_180_PREFIX=$LLVM_SYS_181_PREFIX
+
+# Install Rust nightly
+rustup toolchain install nightly
+
+# Build OtterLang
+cargo +nightly build --release
+```
+
+**Fedora/RHEL**
+
+```bash
+# Clone the repository (if you haven't already)
+git clone https://github.com/jonathanmagambo/otterlang.git
+cd otterlang
+
+# Install LLVM 18
+sudo dnf -y install llvm18 llvm18-devel clang18
+
+# Set environment variables
+export LLVM_SYS_181_PREFIX=/usr/lib64/llvm18
+export LLVM_SYS_180_PREFIX=$LLVM_SYS_181_PREFIX
+
+# Install Rust nightly
+rustup toolchain install nightly
+
+# Build OtterLang
 cargo +nightly build --release
 ```
 
 **Windows**
 
+**Important:** You must use the **x64 Native Tools Command Prompt for VS 2022** (or Visual Studio Developer Command Prompt) to build. The MSVC linker requires environment variables that are only set in the Developer Command Prompt.
+
 ```powershell
-cargo install llvmenv --locked
-llvmenv install 18.1
-llvmenv global 18.1
+# Clone the repository (if you haven't already)
+git clone https://github.com/jonathanmagambo/otterlang.git
+cd otterlang
 
-$llvmPath = llvmenv prefix
-$env:LLVM_SYS_181_PREFIX = $llvmPath
-$env:LLVM_SYS_180_PREFIX = $llvmPath
-$env:Path = "$llvmPath\bin;$env:Path"
+# Install LLVM 18 using winget (recommended)
+winget install -e --id LLVM.LLVM -v "18.1.8" --silent --accept-package-agreements --accept-source-agreements
+$env:LLVM_SYS_181_PREFIX = "C:\\Program Files\\LLVM"
+$env:LLVM_SYS_180_PREFIX = $env:LLVM_SYS_181_PREFIX
+$env:Path = "$env:LLVM_SYS_181_PREFIX\\bin;$env:Path"
 
+# Install Rust nightly
 rustup toolchain install nightly
 rustup default nightly
 
+# Build OtterLang
 cargo +nightly build --release
 ```
 
-> **Note for Windows users:** Use the *x64 Native Tools Command Prompt for VS 2022*. It preloads the MSVC linker environment that plain PowerShell/CMD sessions lack.
+**Note:** The LLVM installation path may vary depending on the installation method. A typical location is `C:\Program Files\LLVM`.
 
 ## Building & Testing
 
@@ -138,4 +236,4 @@ When reporting issues, please include:
 
 ## License
 
-By contributing, you agree that your work will be released under the MIT License.
+By contributing, you agree that your work will be released under the BSD-3-Clause License.
