@@ -25,7 +25,7 @@
 
 <h1 align="center">What is OtterLang?</h1>
 
-OtterLang is an indentation-sensitive programming language with an LLVM backend that compiles to native machine code. It combines Python-like simplicity with Rust-like performance and seamless interoperability with the Rust ecosystem.
+OtterLang is an indentation-sensitive programming language with an LLVM backend that compiles to native machine code. It combines Python-like simplicity with Rust-like performance and seamless (not yet seamless) interoperability with the Rust ecosystem.
 
 **Think of OtterLang as a modern language that bridges the gap between high-level expressiveness and low-level performance, with transparent access to the entire Rust ecosystem.**
 
