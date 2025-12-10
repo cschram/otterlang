@@ -8,9 +8,9 @@ use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::jit::profiler::{CompilationProfiler, FunctionMetrics, MemoryProfiler};
-use crate::jit::tiered_compiler::{CompilationTier, TieredStats};
 use crate::memory::GcStats;
+use otterc_config::{CompilationTier, TieredStats};
+use otterc_metrics::profiler::{CompilationProfiler, FunctionMetrics, MemoryProfiler};
 
 /// Metadata about a compiled function
 #[derive(Debug, Clone)]

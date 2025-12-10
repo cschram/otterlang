@@ -8,8 +8,8 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use crate::jit::tiered_compiler::TieredConfig;
 use crate::memory::config::GcConfig;
+use otterc_config::TieredConfig;
 
 /// Complete runtime configuration
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

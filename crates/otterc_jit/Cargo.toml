@@ -1,0 +1,26 @@
+[package]
+name = "otterc_jit"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+otterc_ast.path = "../otterc_ast"
+otterc_codegen.path = "../otterc_codegen"
+otterc_config.path = "../otterc_config"
+otterc_metrics.path = "../otterc_metrics"
+otterc_symbol.path = "../otterc_symbol"
+otterc_typecheck.path = "../otterc_typecheck"
+
+ahash = "0.8"
+anyhow = "1.0"
+crossbeam-channel = "0.5"
+inkwell = { version = "0.x", features = ["llvm18-1"] }
+libloading = "0.8"
+parking_lot = "0.12"
+rayon = "1.8"
+serde = { version = "1.0", features = ["derive"] }
+sysinfo = "0.30"
+tempfile = "3.10"
+
+[lints]
+workspace = true

@@ -6,7 +6,6 @@ pub mod engine;
 pub mod executor;
 pub mod layout;
 pub mod optimization;
-pub mod profiler;
 pub mod specialization;
 pub mod tiered_compiler;
 

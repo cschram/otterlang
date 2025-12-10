@@ -1,6 +1,8 @@
 pub mod target;
+pub mod tiered_compiler;
 
 pub use crate::target::TargetTriple;
+pub use crate::tiered_compiler::*;
 use inkwell::OptimizationLevel;
 use std::path::PathBuf;
 

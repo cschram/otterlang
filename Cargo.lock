@@ -1396,6 +1396,7 @@ name = "otterc_config"
 version = "0.1.0"
 dependencies = [
  "inkwell",
+ "serde",
 ]
 
 [[package]]
@@ -1427,12 +1428,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "otterc_jit"
+version = "0.1.0"
+dependencies = [
+ "ahash",
+ "anyhow",
+ "crossbeam-channel",
+ "inkwell",
+ "libloading 0.8.9",
+ "otterc_ast",
+ "otterc_codegen",
+ "otterc_config",
+ "otterc_metrics",
+ "otterc_symbol",
+ "otterc_typecheck",
+ "parking_lot",
+ "rayon",
+ "serde",
+ "sysinfo",
+ "tempfile",
+]
+
+[[package]]
 name = "otterc_lexer"
 version = "0.1.0"
 dependencies = [
  "otterc_span",
  "otterc_utils",
  "thiserror",
+]
+
+[[package]]
+name = "otterc_metrics"
+version = "0.1.0"
+dependencies = [
+ "otterc_config",
+ "parking_lot",
 ]
 
 [[package]]
@@ -1461,32 +1492,23 @@ dependencies = [
 name = "otterc_runtime"
 version = "0.1.0"
 dependencies = [
- "abi_stable",
- "ahash",
  "anyhow",
  "chrono",
- "crossbeam-channel",
  "crossbeam-deque",
  "crossbeam-utils",
- "inkwell",
  "inventory",
  "libc",
- "libloading 0.8.9",
  "libm",
  "once_cell",
- "otterc_ast",
- "otterc_codegen",
  "otterc_config",
  "otterc_ffi",
+ "otterc_metrics",
  "otterc_symbol",
- "otterc_typecheck",
  "parking_lot",
- "rayon",
  "serde",
  "serde_json",
  "serde_yaml",
  "sysinfo",
- "tempfile",
  "tokio",
  "toml",
  "ureq",
@@ -1545,6 +1567,7 @@ dependencies = [
  "otterc_config",
  "otterc_ffi",
  "otterc_fmt",
+ "otterc_jit",
  "otterc_lexer",
  "otterc_module",
  "otterc_parser",

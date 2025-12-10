@@ -15,6 +15,7 @@ Set-Location $contribPath
 
 # Download LLVM
 if (-not (Test-Path "llvm")) {
+    Write-Host "Downloading LLVM..."
     $llvmVersion = "18.1.8"
     $clang = "clang+llvm-$llvmVersion-x86_64-pc-windows-msvc"
     $archive = "$clang.tar.xz"
@@ -25,35 +26,29 @@ if (-not (Test-Path "llvm")) {
     Remove-Item $archive
 }
 
-# Download libxml2 via vcpkg
+# Clone vcpkg
 $vcpkgRoot = "vcpkg"
 if (-not (Test-Path "$cwd\contrib\vcpkg")) {
+    Write-Host "Cloning vcpkg..."
     git clone https://github.com/microsoft/vcpkg $vcpkgRoot | Out-Null
     & "$vcpkgRoot\bootstrap-vcpkg.bat" -disableMetrics | Out-Null
 }
-& "$vcpkgRoot\vcpkg.exe" install libxml2:x64-windows --clean-after-build | Out-Null
 
+# Install libxml2 via vcpkg
 $libDir = Join-Path $vcpkgRoot "installed\x64-windows\lib"
 $primaryLib = Join-Path $libDir "libxml2.lib"
 if (-not (Test-Path $primaryLib)) {
-    throw "libxml2 library not found in $libDir"
-}
-
-$staticName = Join-Path $libDir "libxml2s.lib"
-if (-not (Test-Path $staticName)) {
-    Copy-Item $primaryLib $staticName
-}
-
-$incDir = Join-Path $vcpkgRoot "installed\x64-windows\include\libxml2"
-if (-not (Test-Path (Join-Path $incDir "libxml\xmlversion.h"))) {
-    $incDir = Join-Path $vcpkgRoot "installed\x64-windows\include"
-    if (-not (Test-Path (Join-Path $incDir "libxml\xmlversion.h"))) {
-        throw "libxml2 include headers not found in $incDir"
+    Write-Host "Installing libxml2 via vcpkg..."
+    & "$vcpkgRoot\vcpkg.exe" install libxml2:x64-windows --clean-after-build | Out-Null
+    $staticName = Join-Path $libDir "libxml2s.lib"
+    if (-not (Test-Path $staticName)) {
+        Copy-Item $primaryLib $staticName
     }
 }
 
 Set-Location ..
 
+Write-Host "Setting up environment..."
 $env:LLVM_SYS_181_PREFIX = "$contribPath\llvm"
 $env:LIB = "$contribPath\vcpkg\installed\x64-windows\lib;$env:LIB"
 $env:LIBXML2_LIB_PATH = "$contribPath\vcpkg\installed\x64-windows\lib"

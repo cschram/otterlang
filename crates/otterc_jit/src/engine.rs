@@ -9,13 +9,13 @@ use tempfile::TempDir;
 use otterc_ast::nodes::{Program, Statement};
 use otterc_codegen::build_shared_library;
 use otterc_config::{CodegenOptLevel, CodegenOptions};
+use otterc_metrics::profiler::{FunctionMetrics, GlobalProfiler, HotFunction};
 use otterc_symbol::registry::SymbolRegistry;
 use otterc_typecheck::TypeChecker;
 
 use super::adaptive::{AdaptiveConcurrencyManager, AdaptiveMemoryManager};
 use super::cache::FunctionCache;
 use super::optimization::{CallGraph, Inliner, Reoptimizer};
-use super::profiler::GlobalProfiler;
 use super::specialization::{Specializer, TypeTracker};
 
 /// Function pointer type for different signatures
@@ -308,10 +308,7 @@ impl JitEngine {
     }
 
     /// Optimize hot functions by recompiling with aggressive optimizations
-    fn optimize_hot_functions(
-        &mut self,
-        hot_functions: &[super::profiler::HotFunction],
-    ) -> Result<()> {
+    fn optimize_hot_functions(&mut self, hot_functions: &[HotFunction]) -> Result<()> {
         // Get the program
         let program = self
             .program
@@ -390,7 +387,7 @@ impl JitEngine {
     }
 
     /// Get profiler statistics
-    pub fn get_profiler_stats(&self) -> Vec<super::profiler::FunctionMetrics> {
+    pub fn get_profiler_stats(&self) -> Vec<FunctionMetrics> {
         self.profiler.get_all_metrics()
     }
 

@@ -64,15 +64,6 @@ jobs:
         with:
           arch: x64
 
-      - name: Configure Rust flags (Windows)
-        if: ${{ matrix.os == 'windows-latest' }}
-        shell: pwsh
-        run: |
-          $flags = "-C debuginfo=0 -Clink-arg=/DEBUG:NONE -Clink-arg=legacy_stdio_definitions.lib -Clink-arg=oldnames.lib"
-          "RUSTFLAGS=$flags" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "CARGO_PROFILE_DEV_DEBUG=false" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "CARGO_PROFILE_TEST_DEBUG=false" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
       - name: Install LLVM 18.1 (Windows)
         if: ${{ matrix.os == 'windows-latest' }}
         shell: pwsh

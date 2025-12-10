@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -17,6 +18,11 @@ use otterc_typecheck::{EnumLayout, TypeInfo};
 use super::bridges::prepare_rust_bridges;
 use super::compiler::Compiler;
 use super::config::{BuildArtifact, llvm_triple_to_string, preferred_target_flag};
+
+const RUNTIME_CODE_STANDARD: &str = include_str!("runtimes/standard.c");
+const RUNTIME_CODE_EMBEDDED: &str = include_str!("runtimes/embedded.c");
+const RUNTIME_CODE_WASM: &str = include_str!("runtimes/wasm.c");
+const RUNTIME_CODE_SHIM: &str = include_str!("runtimes/shim.c");
 
 /// Check if a library is available on the system
 fn check_library_available(lib_name: &str) -> bool {
@@ -69,60 +75,48 @@ pub fn current_llvm_version() -> String {
     "15.0".to_string()
 }
 
-/// Build the Rust runtime as a static library
-fn ensure_runtime_library() -> Result<PathBuf> {
-    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());
-    let runtime_lib_dir = Path::new(&manifest_dir).join("target").join("runtime");
-    let runtime_lib = runtime_lib_dir.join("libotterlang_runtime.a");
-
-    // Create runtime library directory
-    fs::create_dir_all(&runtime_lib_dir).context("failed to create runtime library directory")?;
-
-    // Build the runtime as a static library
-    // Use --no-default-features to exclude LLVM dependencies
-    let mut cmd = Command::new("cargo");
-    cmd.args([
-        "rustc",
-        "--release",
-        "--lib",
-        "--crate-type=staticlib",
-        "--no-default-features",
-        "--target-dir",
-        runtime_lib_dir.to_str().unwrap(),
-    ]);
-
-    // Set macOS deployment target for compatibility
-    if cfg!(target_os = "macos") {
-        cmd.env("MACOSX_DEPLOYMENT_TARGET", "11.0");
+/// Find the Rust runtime static library
+fn find_runtime_library(runtime_triple: &TargetTriple) -> Result<PathBuf> {
+    // Use `OTTERC_RUNTIME_LIB` environment variable if set
+    if let Ok(path) = env::var("OTTERC_RUNTIME_LIB") {
+        let lib_path = PathBuf::from(path);
+        let runtime_lib = if runtime_triple.is_windows() {
+            lib_path.join("otterc_runtime.lib")
+        } else {
+            lib_path.join("libotterc_runtime.a")
+        };
+        if runtime_lib.exists() {
+            return Ok(runtime_lib);
+        }
     }
-
-    let status = cmd
-        .status()
-        .context("failed to build runtime static library")?;
-
-    if !status.success() {
-        bail!("failed to build runtime static library");
+    // Search in `PATH`
+    if let Some(paths) = env::var_os("PATH") {
+        for path in env::split_paths(&paths) {
+            let runtime_lib = if runtime_triple.is_windows() {
+                path.join("otterc_runtime.lib")
+            } else {
+                path.join("libotterc_runtime.a")
+            };
+            if runtime_lib.exists() {
+                return Ok(runtime_lib);
+            }
+        }
     }
-
-    // Find the generated library (it will be in target/runtime/release/)
-    let release_dir = runtime_lib_dir.join("release");
-    let generated_lib = if cfg!(target_os = "windows") {
-        release_dir.join("otterlang.lib")
+    // Default to looking in the standard location relative to the executable
+    let exe_path = env::current_exe().context("failed to get current executable path")?;
+    let exe_dir = exe_path
+        .parent()
+        .ok_or_else(|| anyhow!("failed to get executable directory"))?;
+    let runtime_lib = if runtime_triple.is_windows() {
+        exe_dir.join("otterc_runtime.lib")
     } else {
-        release_dir.join("libotterlang.a")
+        exe_dir.join("libotterc_runtime.a")
     };
-
-    if !generated_lib.exists() {
-        bail!(
-            "runtime library was not generated at expected location: {}",
-            generated_lib.display()
-        );
+    if runtime_lib.exists() {
+        Ok(runtime_lib)
+    } else {
+        bail!("failed to find runtime library")
     }
-
-    // Copy to expected location
-    fs::copy(&generated_lib, &runtime_lib).context("failed to copy runtime library")?;
-
-    Ok(runtime_lib)
 }
 
 pub fn build_executable(
@@ -239,7 +233,7 @@ pub fn build_executable(
         })?;
 
     // Build and link the runtime static library (check once)
-    let runtime_lib = ensure_runtime_library()?;
+    let runtime_lib = find_runtime_library(&runtime_triple)?;
     let use_rust_runtime = runtime_lib.exists();
 
     // Create a C runtime shim for the FFI functions (target-specific)
@@ -248,9 +242,13 @@ pub fn build_executable(
     } else {
         let runtime_c = output.with_extension("runtime.c");
         let runtime_c_content = if use_rust_runtime {
-            runtime_triple.runtime_c_shim_code()
+            RUNTIME_CODE_SHIM.to_string()
+        } else if runtime_triple.is_wasm() {
+            RUNTIME_CODE_WASM.to_string()
+        } else if runtime_triple.is_embedded() {
+            RUNTIME_CODE_EMBEDDED.to_string()
         } else {
-            runtime_triple.runtime_c_code()
+            RUNTIME_CODE_STANDARD.to_string()
         };
         fs::write(&runtime_c, runtime_c_content).context("failed to write runtime C file")?;
         Some(runtime_c)
@@ -600,7 +598,13 @@ pub fn build_shared_library(
         None
     } else {
         let runtime_c = output.with_extension("runtime.c");
-        let runtime_c_content = runtime_triple.runtime_c_code();
+        let runtime_c_content = if runtime_triple.is_wasm() {
+            RUNTIME_CODE_WASM.to_string()
+        } else if runtime_triple.is_embedded() {
+            RUNTIME_CODE_EMBEDDED.to_string()
+        } else {
+            RUNTIME_CODE_STANDARD.to_string()
+        };
         fs::write(&runtime_c, runtime_c_content).context("failed to write runtime C file")?;
         Some(runtime_c)
     };
@@ -656,7 +660,7 @@ pub fn build_shared_library(
     };
 
     // Build and check runtime static library (check once)
-    let runtime_lib = ensure_runtime_library()?;
+    let runtime_lib = find_runtime_library(&runtime_triple)?;
     let use_rust_runtime = runtime_lib.exists();
 
     // Link as shared library (target-specific)

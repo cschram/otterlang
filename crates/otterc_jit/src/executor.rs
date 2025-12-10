@@ -1,6 +1,7 @@
-use crate::jit::engine::JitEngine;
+use crate::engine::JitEngine;
 use anyhow::Result;
 use otterc_ast::nodes::Program;
+use otterc_metrics::profiler::FunctionMetrics;
 use otterc_symbol::registry::SymbolRegistry;
 use std::collections::HashMap;
 
@@ -87,6 +88,6 @@ impl JitExecutor {
 
 #[derive(Debug)]
 pub struct ExecutorStats {
-    pub profiler_metrics: Vec<super::profiler::FunctionMetrics>,
+    pub profiler_metrics: Vec<FunctionMetrics>,
     pub cache_stats: super::cache::function_cache::CacheStats,
 }

@@ -1,0 +1,12 @@
+[package]
+name = "otterc_metrics"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+otterc_config.path = "../otterc_config"
+
+parking_lot = "0.12"
+
+[lints]
+workspace = true

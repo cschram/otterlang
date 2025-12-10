@@ -1,9 +1,9 @@
 use anyhow::{Context, Result, bail};
 
 use otterc_ast::nodes::{Block, Expr, Function, Node, Program, Statement};
+use otterc_jit::executor::JitExecutor;
 use otterc_lexer::tokenize;
 use otterc_parser::parse;
-use otterc_runtime::jit::executor::JitExecutor;
 use otterc_span::Span;
 use otterc_symbol::registry::SymbolRegistry;
 use otterc_typecheck::TypeChecker;

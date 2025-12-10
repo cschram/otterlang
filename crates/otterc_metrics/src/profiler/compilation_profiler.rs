@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::jit::tiered_compiler::CompilationTier;
+use otterc_config::CompilationTier;
 
 /// Compilation event
 #[derive(Debug, Clone)]
