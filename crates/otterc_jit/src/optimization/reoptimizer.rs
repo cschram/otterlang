@@ -80,7 +80,7 @@ impl Reoptimizer {
 
         for stmt in &mut optimized.statements {
             if let Statement::Function(func) = stmt.as_mut() {
-                if hot_set.contains(&func.as_ref().name) {
+                if hot_set.contains(&func.as_ref().signature.as_ref().name) {
                     *func = func.clone().map(|func| self.post_inline_optimize(&func));
                 } else {
                     *func = func.clone().map(|func| self.reoptimize_function(&func));

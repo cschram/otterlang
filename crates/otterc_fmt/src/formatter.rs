@@ -1,6 +1,6 @@
 use otterc_ast::nodes::{
-    BinaryOp, Block, Expr, FStringPart, Function, Literal, Node, Pattern, Program, Statement, Type,
-    UnaryOp,
+    BinaryOp, Block, Expr, FStringPart, Function, FunctionSignature, Literal, Node, Pattern,
+    Program, Statement, TraitMethod, Type, UnaryOp,
 };
 
 /// Formats OtterLang code
@@ -113,7 +113,6 @@ impl Formatter {
             Statement::Struct {
                 name,
                 fields,
-                methods,
                 public,
                 generics,
             } => {
@@ -137,9 +136,6 @@ impl Formatter {
                         field_name,
                         self.format_type(field_type)
                     ));
-                }
-                for method in methods {
-                    result.push_str(&self.format_function(method, indent + 1));
                 }
                 result
             }
@@ -208,6 +204,88 @@ impl Formatter {
                     self.format_type(target)
                 )
             }
+            Statement::Trait {
+                name,
+                methods,
+                public,
+                generics,
+            } => {
+                let pub_str = if *public { "pub " } else { "" };
+                let gen_str = if generics.is_empty() {
+                    String::new()
+                } else {
+                    format!("<{}>", generics.join(", "))
+                };
+                let mut result = format!(
+                    "{}{}trait {}{}:\n",
+                    self.indent(indent),
+                    pub_str,
+                    name,
+                    gen_str
+                );
+                for method in methods {
+                    match method {
+                        TraitMethod::Signature(signature) => {
+                            let params_str = signature
+                                .as_ref()
+                                .params
+                                .iter()
+                                .map(|p| {
+                                    if let Some(ref ty) = p.as_ref().ty {
+                                        format!("{}: {}", p.as_ref().name, self.format_type(ty))
+                                    } else {
+                                        p.as_ref().name.as_ref().clone()
+                                    }
+                                })
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            let ret_str = if let Some(ret_ty) = &signature.as_ref().ret_ty {
+                                format!(" -> {}", self.format_type(ret_ty))
+                            } else {
+                                String::new()
+                            };
+                            result.push_str(&format!(
+                                "{}    fn {}({}){}\n",
+                                self.indent(indent),
+                                name,
+                                params_str,
+                                ret_str
+                            ));
+                        }
+                        TraitMethod::DefaultImplementation(function) => {
+                            result.push_str(&self.format_function(function, indent + 1));
+                        }
+                    }
+                }
+                result
+            }
+            Statement::Impl {
+                trait_name,
+                type_name,
+                methods,
+                generics,
+            } => {
+                let gen_str = if generics.is_empty() {
+                    String::new()
+                } else {
+                    format!("<{}>", generics.join(", "))
+                };
+                let mut result = if let Some(trait_name) = trait_name {
+                    format!(
+                        "{}impl {} for {}{}:\n",
+                        self.indent(indent),
+                        trait_name,
+                        type_name,
+                        gen_str
+                    )
+                } else {
+                    format!("{}impl {}{}:\n", self.indent(indent), type_name, gen_str)
+                };
+                for method in methods {
+                    result.push_str(&self.format_function(method, indent + 1));
+                }
+                result
+            }
             Statement::Use { imports } => {
                 let modules: Vec<String> = imports
                     .iter()
@@ -243,6 +321,8 @@ impl Formatter {
         let pub_str = if f.as_ref().public { "pub " } else { "" };
         let params_str = f
             .as_ref()
+            .signature
+            .as_ref()
             .params
             .iter()
             .map(|p| {
@@ -259,7 +339,7 @@ impl Formatter {
             })
             .collect::<Vec<_>>()
             .join(", ");
-        let ret_str = if let Some(ref ret_ty) = f.as_ref().ret_ty {
+        let ret_str = if let Some(ref ret_ty) = f.as_ref().signature.as_ref().ret_ty {
             format!(" -> {}", self.format_type(ret_ty))
         } else {
             String::new()
@@ -268,7 +348,7 @@ impl Formatter {
             "{}{}fn {}({}){}:\n{}",
             self.indent(indent),
             pub_str,
-            f.as_ref().name,
+            f.as_ref().signature.as_ref().name,
             params_str,
             ret_str,
             self.format_block(&f.as_ref().body, indent + 1)

@@ -788,6 +788,8 @@ impl LexerState {
             "enum" => TokenKind::Enum,
             "and" => TokenKind::And,
             "or" => TokenKind::Or,
+            "trait" => TokenKind::Trait,
+            "impl" => TokenKind::Impl,
             _ => TokenKind::Identifier(value.to_string()),
         };
 

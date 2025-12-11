@@ -114,40 +114,45 @@ impl Program {
 }
 
 #[derive(Debug, Clone)]
-pub struct Function {
+pub struct FunctionSignature {
     pub name: String,
     pub params: Vec<Node<Param>>,
     pub ret_ty: Option<Node<Type>>,
+}
+
+impl FunctionSignature {
+    pub fn new(
+        name: impl Into<String>,
+        params: Vec<Node<Param>>,
+        ret_ty: Option<Node<Type>>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            params,
+            ret_ty,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Function {
+    pub signature: Node<FunctionSignature>,
     pub body: Node<Block>,
     pub public: bool,
 }
 
 impl Function {
-    pub fn new(
-        name: impl Into<String>,
-        params: Vec<Node<Param>>,
-        ret_ty: Option<Node<Type>>,
-        body: Node<Block>,
-    ) -> Self {
+    pub fn new(signature: Node<FunctionSignature>, body: Node<Block>) -> Self {
         Self {
-            name: name.into(),
-            params,
-            ret_ty,
+            signature,
             body,
             public: false,
         }
     }
 
-    pub fn new_public(
-        name: impl Into<String>,
-        params: Vec<Node<Param>>,
-        ret_ty: Option<Node<Type>>,
-        body: Node<Block>,
-    ) -> Self {
+    pub fn new_public(signature: Node<FunctionSignature>, body: Node<Block>) -> Self {
         Self {
-            name: name.into(),
-            params,
-            ret_ty,
+            signature,
             body,
             public: true,
         }
@@ -215,6 +220,24 @@ impl EnumVariant {
 }
 
 #[derive(Debug, Clone)]
+pub enum TraitMethod {
+    Signature(Node<FunctionSignature>),
+    DefaultImplementation(Node<Function>),
+}
+
+impl From<Node<FunctionSignature>> for TraitMethod {
+    fn from(sig: Node<FunctionSignature>) -> Self {
+        TraitMethod::Signature(sig)
+    }
+}
+
+impl From<Node<Function>> for TraitMethod {
+    fn from(func: Node<Function>) -> Self {
+        TraitMethod::DefaultImplementation(func)
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum Statement {
     // Variable declarations and assignments
     Let {
@@ -256,7 +279,6 @@ pub enum Statement {
     Struct {
         name: String,
         fields: Vec<(String, Node<Type>)>,
-        methods: Vec<Node<Function>>, // Methods (functions with self parameter)
         public: bool,
         generics: Vec<String>, // Generic type parameters
     },
@@ -271,6 +293,18 @@ pub enum Statement {
         target: Node<Type>,
         public: bool,
         generics: Vec<String>, // Generic type parameters
+    },
+    Trait {
+        name: String,
+        methods: Vec<TraitMethod>,
+        public: bool,
+        generics: Vec<String>,
+    },
+    Impl {
+        trait_name: Option<String>,
+        type_name: String,
+        methods: Vec<Node<Function>>,
+        generics: Vec<String>,
     },
 
     // Expressions as statements
@@ -307,7 +341,9 @@ impl Statement {
             | Statement::PubUse { .. }
             | Statement::Struct { .. }
             | Statement::Enum { .. }
-            | Statement::TypeAlias { .. } => 1,
+            | Statement::TypeAlias { .. }
+            | Statement::Trait { .. }
+            | Statement::Impl { .. } => 1,
 
             Statement::If {
                 then_block,

@@ -72,7 +72,7 @@ impl TestDiscovery {
                 let line_number = Self::estimate_line_number(&source, idx);
                 tests.push(TestCase {
                     file_path: file_path.to_path_buf(),
-                    function_name: func.as_ref().name.clone(),
+                    function_name: func.as_ref().signature.as_ref().name.clone(),
                     function: func.as_ref().clone(),
                     line_number,
                 });
@@ -102,7 +102,8 @@ impl TestDiscovery {
     }
 
     fn is_test_function(func: &Function) -> bool {
-        func.name.starts_with("test_") || (func.public && func.name.starts_with("test"))
+        func.signature.as_ref().name.starts_with("test_")
+            || (func.public && func.signature.as_ref().name.starts_with("test"))
     }
 
     fn estimate_line_number(source: &str, statement_index: usize) -> usize {

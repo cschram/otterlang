@@ -1,0 +1,42 @@
+trait Iterator<T>:
+    fn next(self) -> Option<T>
+
+struct ListNode<T>:
+    value: T
+    next: Option<ListNode<T>>
+    
+struct List<T>:
+    head: ListNode<T>
+
+impl List<T>:
+    pub fn insert(self, value: T):
+        let tail = self.head
+        while tail.next != Option.None:
+            tail = tail.next.unwrap()
+        tail.next = Option.Some(ListNode(value = value, next = Option.None))
+    
+    pub fn iter(self) -> LinkedListIterator<T>:
+        return LinkedListIterator(current = self.head)
+
+fn new_list<T>(initial_value: T) -> List<T>:
+    return List(head = ListNode(value = initial_value, next = Option.None))
+
+struct LinkedListIterator<T>:
+    current: ListNode<T>
+
+impl Iterator<T> for LinkedListIterator<T>:
+    fn next(self) -> Option<T>
+        match self.current:
+            case Option.Some(node):
+                return Option.Some(node.value)
+            case Option.None:
+                return None
+
+fn main():
+    let my_list = new_list(1)
+    my_list.insert(2)
+    my_list.insert(3)
+
+    let iterator = my_list.iter()
+    while let Some(value) = iterator.next():
+        println(value)

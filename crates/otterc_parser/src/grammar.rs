@@ -2,8 +2,9 @@ use chumsky::Stream;
 use chumsky::prelude::*;
 
 use otterc_ast::nodes::{
-    BinaryOp, Block, EnumVariant, Expr, FStringPart, Function, Literal, MatchArm, Node,
-    NumberLiteral, Param, Pattern, Program, Statement, Type, UnaryOp, UseImport,
+    BinaryOp, Block, EnumVariant, Expr, FStringPart, Function, FunctionSignature, Literal,
+    MatchArm, Node, NumberLiteral, Param, Pattern, Program, Statement, TraitMethod, Type, UnaryOp,
+    UseImport,
 };
 
 use otterc_lexer::token::{Token, TokenKind};
@@ -1218,21 +1219,28 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
 
     let function_keyword = just(TokenKind::Fn);
 
+    let function_signature = function_keyword
+        .clone()
+        .ignore_then(identifier_parser())
+        .then(function_params.clone())
+        .then(function_ret_type)
+        .map_with_span(|((name, params), ret_ty), span| {
+            Node::new(FunctionSignature::new(name, params, ret_ty), span)
+        })
+        .boxed();
+
     let function = pub_keyword
         .clone()
-        .then(function_keyword.clone())
-        .then(identifier_parser())
-        .then(function_params)
-        .then(function_ret_type)
+        .then(function_signature.clone())
         .then_ignore(just(TokenKind::Colon))
         .then_ignore(newline.clone())
         .then(block.clone())
-        .map_with_span(|(((((pub_kw, _fn), name), params), ret_ty), body), span| {
+        .map_with_span(|((pub_kw, signature), body), span| {
             Node::new(
                 if pub_kw.is_some() {
-                    Function::new_public(name, params, ret_ty, body)
+                    Function::new_public(signature, body)
                 } else {
-                    Function::new(name, params, ret_ty, body)
+                    Function::new(signature, body)
                 },
                 span,
             )
@@ -1293,85 +1301,13 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
     //         return math.sqrt(self.x * self.x + self.y * self.y)
 
     // Field definition
-    let struct_field_def = struct_field
-        .then_ignore(newline.clone().or_not())
-        .map(|field| (Some(field), None::<Node<Function>>))
-        .boxed();
+    let struct_field_def = struct_field.then_ignore(newline.clone().or_not()).boxed();
 
-    // Method definition (fn method(self, ...) -> ReturnType: ...)
-    // Recreate parsers for method definition
-    let method_function_param = identifier_parser()
-        .map_with_span(Node::new)
-        .then(choice((
-            just(TokenKind::Colon).ignore_then(type_parser()).map(Some),
-            empty().to(None),
-        )))
-        .then(choice((
-            just(TokenKind::Equals).ignore_then(expr.clone()).map(Some),
-            empty().to(None),
-        )))
-        .map_with_span(|((name, ty), default), span| Node::new(Param::new(name, ty, default), span))
-        .boxed();
-
-    let method_function_params = method_function_param
-        .separated_by(just(TokenKind::Comma))
-        .allow_trailing()
-        .delimited_by(just(TokenKind::LParen), just(TokenKind::RParen))
-        .or_not()
-        .map(|params| params.unwrap_or_default())
-        .boxed();
-
-    let method_function_ret_type = just(TokenKind::Arrow).ignore_then(type_parser()).or_not();
-
-    let struct_method_def = function_keyword
-        .clone()
-        .then(identifier_parser())
-        .then(method_function_params)
-        .then(method_function_ret_type)
-        .then_ignore(just(TokenKind::Colon))
-        .then_ignore(newline.clone())
-        .then(block.clone())
-        .map_with_span(|((((_kw, name), params), ret_ty), body), span| {
-            // Methods automatically get 'self' as first parameter if not present
-            let mut method_params = params;
-            if method_params.is_empty() || method_params[0].as_ref().name.as_ref() != "self" {
-                // Add self parameter at the beginning
-                let self_type = Type::Simple("Self".to_string());
-                let self_span = Span::new(span.start + name.len() + 1, span.start + name.len() + 5);
-                let self_type_span = Span::new(self_span.start(), self_span.start());
-                let self_param = Node::new(
-                    Param::new(
-                        Node::new("self".to_string(), self_span),
-                        Some(Node::new(self_type, self_type_span)),
-                        None,
-                    ),
-                    self_span,
-                );
-                method_params.insert(0, self_param);
-            }
-            Node::new(Function::new(name, method_params, ret_ty, body), span)
-        })
-        .map(|method| (None::<(String, Node<Type>)>, Some(method)))
-        .then_ignore(newline.clone().or_not())
-        .boxed();
-
-    let struct_body = choice((struct_field_def, struct_method_def))
+    let struct_body = struct_field_def
         .repeated()
         .at_least(0)
         .then_ignore(newline.clone().or_not())
-        .map(|items| {
-            let mut fields = Vec::new();
-            let mut methods = Vec::new();
-            for (field, method) in items {
-                if let Some(f) = field {
-                    fields.push(f);
-                }
-                if let Some(m) = method {
-                    methods.push(m);
-                }
-            }
-            (fields, methods)
-        });
+        .boxed();
 
     let struct_def = pub_keyword
         .clone()
@@ -1382,20 +1318,17 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
         .then_ignore(newline.clone())
         .then(struct_body.delimited_by(just(TokenKind::Indent), just(TokenKind::Dedent)))
         .then_ignore(newline.clone().or_not())
-        .map_with_span(
-            |((((pub_kw, _), name), generics), (fields, methods)), span| {
-                Node::new(
-                    Statement::Struct {
-                        name,
-                        fields,
-                        methods,
-                        public: pub_kw.is_some(),
-                        generics,
-                    },
-                    span,
-                )
-            },
-        )
+        .map_with_span(|((((pub_kw, _), name), generics), fields), span| {
+            Node::new(
+                Statement::Struct {
+                    name,
+                    fields,
+                    public: pub_kw.is_some(),
+                    generics,
+                },
+                span,
+            )
+        })
         .boxed();
 
     let enum_def = pub_keyword
@@ -1450,10 +1383,59 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
         })
         .boxed();
 
+    let trait_def = pub_keyword
+        .then(just(TokenKind::Trait))
+        .then(identifier_parser())
+        .then(struct_generics())
+        .then_ignore(just(TokenKind::Colon))
+        .then_ignore(newline.clone())
+        .then(
+            function_signature
+                .clone()
+                .then(
+                    just(TokenKind::Colon)
+                        .ignore_then(newline.clone())
+                        .ignore_then(block.clone())
+                        .or_not(),
+                )
+                .map_with_span(|(signature, body), span| match body {
+                    None => TraitMethod::Signature(signature),
+                    Some(body) => TraitMethod::DefaultImplementation(Node::new(
+                        Function::new(signature, body),
+                        span,
+                    )),
+                })
+                .repeated()
+                .at_least(1),
+        )
+        .delimited_by(just(TokenKind::Indent), just(TokenKind::Dedent))
+        .map_with_span(|((((pub_kw, _), name), generics), methods), span| {
+            Node::new(
+                Statement::Trait {
+                    name,
+                    methods,
+                    generics,
+                    public: pub_kw.is_some(),
+                },
+                span,
+            )
+        })
+        .boxed();
+
     newline
         .clone()
         .or_not()
-        .ignore_then(choice((struct_def, enum_def, type_alias_def, function, statement)).repeated())
+        .ignore_then(
+            choice((
+                struct_def,
+                enum_def,
+                type_alias_def,
+                trait_def,
+                function,
+                statement,
+            ))
+            .repeated(),
+        )
         .then_ignore(newline.repeated().or_not())
         .then_ignore(just(TokenKind::Eof))
         .map(Program::new)

@@ -155,14 +155,6 @@ impl<'ctx> Compiler<'ctx> {
                 }
                 Ok(())
             }
-            Statement::Pass
-            | Statement::Struct { .. }
-            // Handled at module level
-            | Statement::Enum { .. }
-            | Statement::TypeAlias { .. }
-            | Statement::Function(_)
-            | Statement::Use { .. }
-            | Statement::PubUse { .. } => Ok(()),
             Statement::For {
                 var,
                 iterable,
@@ -175,6 +167,7 @@ impl<'ctx> Compiler<'ctx> {
                 ctx,
             ),
             Statement::Block(block) => self.lower_block(block.as_ref(), function, ctx),
+            _ => Ok(()),
         }
     }
 

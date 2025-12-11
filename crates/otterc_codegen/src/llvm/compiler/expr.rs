@@ -338,16 +338,7 @@ impl<'ctx> Compiler<'ctx> {
             Statement::Block(block) => {
                 self.collect_captured_names_in_block(block.as_ref(), ctx, captures);
             }
-            Statement::Return(None)
-            | Statement::Break
-            | Statement::Continue
-            | Statement::Pass
-            | Statement::Use { .. }
-            | Statement::PubUse { .. }
-            | Statement::Struct { .. }
-            | Statement::Enum { .. }
-            | Statement::TypeAlias { .. }
-            | Statement::Function(_) => {}
+            _ => {}
         }
     }
 
@@ -2698,16 +2689,6 @@ impl<'ctx> Compiler<'ctx> {
             | Statement::Assignment { expr, .. } => {
                 self.find_identifier_type_in_expr(expr.as_ref(), var)
             }
-            Statement::Return(None)
-            | Statement::Break
-            | Statement::Continue
-            | Statement::Pass
-            | Statement::Struct { .. }
-            | Statement::Enum { .. }
-            | Statement::TypeAlias { .. }
-            | Statement::Use { .. }
-            | Statement::PubUse { .. }
-            | Statement::Function(_) => None,
             Statement::If {
                 cond,
                 then_block,
@@ -2734,6 +2715,7 @@ impl<'ctx> Compiler<'ctx> {
                 .find_identifier_type_in_expr(iterable.as_ref(), var)
                 .or_else(|| self.find_identifier_type_in_block(body.as_ref(), var)),
             Statement::Block(block) => self.find_identifier_type_in_block(block.as_ref(), var),
+            _ => None,
         }
     }
 

@@ -93,6 +93,8 @@ struct CallableParam {
 impl CallableInfo {
     fn from_function(func: &Function) -> Self {
         let params = func
+            .signature
+            .as_ref()
             .params
             .iter()
             .map(|param| CallableParam {
@@ -106,10 +108,15 @@ impl CallableInfo {
             })
             .collect();
 
-        let return_type = func.ret_ty.as_ref().map(|ty| format_type(ty.as_ref()));
+        let return_type = func
+            .signature
+            .as_ref()
+            .ret_ty
+            .as_ref()
+            .map(|ty| format_type(ty.as_ref()));
 
         Self {
-            name: func.name.clone(),
+            name: func.signature.as_ref().name.clone(),
             params,
             return_type,
         }
@@ -988,12 +995,19 @@ fn build_symbol_table_from_statements(
 
             Statement::Function(func) => {
                 // Find function name span from tokens
-                if let Some(span) = find_name_span(&func.as_ref().name, tokens, text) {
+                if let Some(span) =
+                    find_name_span(&func.as_ref().signature.as_ref().name, tokens, text)
+                {
                     let sig = format_function_signature(func.as_ref());
                     let callable = Some(CallableInfo::from_function(func.as_ref()));
-                    table.add_function(func.as_ref().name.clone(), span, Some(sig), callable);
+                    table.add_function(
+                        func.as_ref().signature.as_ref().name.clone(),
+                        span,
+                        Some(sig),
+                        callable,
+                    );
                 }
-                for param in &func.as_ref().params {
+                for param in &func.as_ref().signature.as_ref().params {
                     let ty = param
                         .as_ref()
                         .ty
@@ -1008,15 +1022,24 @@ fn build_symbol_table_from_statements(
                     text,
                 );
             }
-            Statement::Struct { name, methods, .. } => {
+            Statement::Struct { name, .. } => {
                 if let Some(span) = find_name_span(name, tokens, text) {
                     table.add_struct(name.clone(), span);
                 }
+            }
+            Statement::Impl { methods, .. } => {
                 for method in methods {
-                    if let Some(span) = find_name_span(&method.as_ref().name, tokens, text) {
+                    if let Some(span) =
+                        find_name_span(&method.as_ref().signature.as_ref().name, tokens, text)
+                    {
                         let sig = format_function_signature(method.as_ref());
                         let callable = Some(CallableInfo::from_function(method.as_ref()));
-                        table.add_method(method.as_ref().name.clone(), span, Some(sig), callable);
+                        table.add_method(
+                            method.as_ref().signature.as_ref().name.clone(),
+                            span,
+                            Some(sig),
+                            callable,
+                        );
                     }
                 }
             }
@@ -1088,7 +1111,7 @@ fn collect_references_from_statements(
                 collect_references_from_expr(
                     &Expr::Call {
                         func: Box::new(Node::new(
-                            Expr::Identifier(func.as_ref().name.clone()),
+                            Expr::Identifier(func.as_ref().signature.as_ref().name.clone()),
                             *span,
                         )),
                         args: vec![],
@@ -1222,6 +1245,8 @@ fn find_name_span(name: &str, tokens: &[Token], _text: &str) -> Option<Span> {
 /// Format function signature for display
 fn format_function_signature(func: &Function) -> String {
     let params: Vec<String> = func
+        .signature
+        .as_ref()
         .params
         .iter()
         .map(|p| {
@@ -1235,11 +1260,18 @@ fn format_function_signature(func: &Function) -> String {
         })
         .collect();
     let ret_ty = func
+        .signature
+        .as_ref()
         .ret_ty
         .as_ref()
         .map(|t| format!(" -> {}", format_type(t.as_ref())))
         .unwrap_or_default();
-    format!("fn {}({}){}", func.name, params.join(", "), ret_ty)
+    format!(
+        "fn {}({}){}",
+        func.signature.as_ref().name,
+        params.join(", "),
+        ret_ty
+    )
 }
 
 fn format_callable_signature(callable: &CallableInfo) -> String {

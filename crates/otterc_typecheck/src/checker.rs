@@ -245,7 +245,7 @@ impl TypeChecker {
                 let sig = self.infer_function_signature(function);
                 self.context
                     .functions
-                    .insert(function.as_ref().name.clone(), sig);
+                    .insert(function.as_ref().signature.as_ref().name.clone(), sig);
             }
         }
 
@@ -256,14 +256,15 @@ impl TypeChecker {
                 Statement::Function(function) => {
                     self.check_function(function)?;
                 }
-                Statement::Struct { name, methods, .. } => {
-                    self.check_struct_methods(name, methods)?;
-                }
                 Statement::Let { .. } | Statement::Expr(_) => {
                     // Top-level let and expressions are allowed
                     self.check_statement(statement)?;
                 }
-                Statement::Enum { .. }
+                Statement::Impl { .. } => {
+                    todo!()
+                }
+                Statement::Struct { .. }
+                | Statement::Enum { .. }
                 | Statement::TypeAlias { .. }
                 | Statement::Use { .. }
                 | Statement::PubUse { .. } => {}
@@ -295,10 +296,14 @@ impl TypeChecker {
     ) -> Result<()> {
         for method in methods {
             let mut method_clone = method.as_ref().clone();
-            method_clone.name = format!("{}.{}", struct_name, method_clone.name);
+            method_clone.signature.as_mut().name =
+                format!("{}.{}", struct_name, method_clone.signature.as_ref().name);
             self.rewrite_method_self_param(&mut method_clone, struct_name);
             let node = Node::new(method_clone, *method.span());
-            self.record_method_metadata(&node.as_ref().name, node.as_ref().body.as_ref());
+            self.record_method_metadata(
+                &node.as_ref().signature.as_ref().name,
+                node.as_ref().body.as_ref(),
+            );
             self.check_function(&node)?;
         }
         Ok(())
@@ -346,16 +351,6 @@ impl TypeChecker {
                 self.collect_metadata_in_expr(expr, spans, expr_ids);
             }
             Statement::Return(Some(expr)) => self.collect_metadata_in_expr(expr, spans, expr_ids),
-            Statement::Return(None)
-            | Statement::Break
-            | Statement::Continue
-            | Statement::Pass
-            | Statement::Use { .. }
-            | Statement::PubUse { .. }
-            | Statement::Struct { .. }
-            | Statement::Enum { .. }
-            | Statement::TypeAlias { .. }
-            | Statement::Function(_) => {}
             Statement::If {
                 cond,
                 then_block,
@@ -383,6 +378,7 @@ impl TypeChecker {
             Statement::Block(block) => {
                 self.collect_metadata_in_block(block.as_ref(), spans, expr_ids);
             }
+            _ => {}
         }
     }
 
@@ -486,7 +482,7 @@ impl TypeChecker {
                     self.collect_metadata_in_expr(value, spans, expr_ids);
                 }
             }
-            Expr::Literal(_) | Expr::Identifier(_) => {}
+            _ => {}
         }
     }
 
@@ -539,7 +535,7 @@ impl TypeChecker {
     }
 
     fn rewrite_method_self_param(&self, method_func: &mut Function, struct_name: &str) {
-        let Some(first_param) = method_func.params.first_mut() else {
+        let Some(first_param) = method_func.signature.as_mut().params.first_mut() else {
             return;
         };
 
@@ -565,7 +561,7 @@ impl TypeChecker {
         let mut param_defaults = Vec::new();
         let mut seen_default = false;
 
-        for param in &function.as_ref().params {
+        for param in &function.as_ref().signature.as_ref().params {
             let explicit_type = param
                 .as_ref()
                 .ty
@@ -627,7 +623,7 @@ impl TypeChecker {
             }
         }
 
-        let return_type = if let Some(ty) = &function.as_ref().ret_ty {
+        let return_type = if let Some(ty) = &function.as_ref().signature.as_ref().ret_ty {
             self.context.type_from_annotation(ty)
         } else {
             TypeInfo::Unknown
@@ -710,7 +706,6 @@ impl TypeChecker {
                 Statement::Struct {
                     name,
                     fields,
-                    methods,
                     generics,
                     public,
                 } => {
@@ -764,29 +759,6 @@ impl TypeChecker {
                         public: *public,
                     };
                     self.context.define_struct(definition);
-
-                    // Push generic parameters to context for method type checking
-                    for generic in generics {
-                        self.context.push_generic(generic.clone());
-                    }
-
-                    for method in methods {
-                        let mut method_clone = method.as_ref().clone();
-                        self.rewrite_method_self_param(&mut method_clone, name);
-                        let method_name = format!("{}.{}", name, method_clone.name);
-                        let method_node = Node::new(method_clone, *method.span());
-                        self.record_method_metadata(
-                            &method_name,
-                            method_node.as_ref().body.as_ref(),
-                        );
-                        let sig = self.infer_function_signature(&method_node);
-                        self.context.insert_function(method_name.clone(), sig);
-                    }
-
-                    // Pop generic parameters
-                    for _ in generics {
-                        self.context.pop_generic();
-                    }
                 }
                 Statement::TypeAlias {
                     name,
@@ -811,6 +783,12 @@ impl TypeChecker {
                     };
                     self.context.define_enum(definition);
                 }
+                Statement::Trait { .. } => {
+                    todo!()
+                }
+                Statement::Impl { .. } => {
+                    todo!()
+                }
                 _ => {}
             }
         }
@@ -819,7 +797,7 @@ impl TypeChecker {
     /// Type check a function
     fn check_function(&mut self, function: &Node<Function>) -> Result<()> {
         // Determine function return type
-        let return_type = if let Some(ret_ty) = &function.as_ref().ret_ty {
+        let return_type = if let Some(ret_ty) = &function.as_ref().signature.as_ref().ret_ty {
             self.context.type_from_annotation(ret_ty)
         } else {
             TypeInfo::Unit
@@ -829,7 +807,7 @@ impl TypeChecker {
         fn_context.variables = self.context.variables.clone();
 
         // Add function parameters to context, overriding any globals/imports
-        for param in &function.as_ref().params {
+        for param in &function.as_ref().signature.as_ref().params {
             let param_type = if let Some(ty) = &param.as_ref().ty {
                 self.context.type_from_annotation(ty)
             } else {
@@ -865,13 +843,13 @@ impl TypeChecker {
         let mut generic_params = Vec::new();
 
         // Check parameter types for generic parameters
-        for param in &function.as_ref().params {
+        for param in &function.as_ref().signature.as_ref().params {
             if let Some(ty) = &param.as_ref().ty {
                 self.extract_generic_params(ty, &mut generic_params);
             }
         }
 
-        if let Some(ret_ty) = &function.as_ref().ret_ty {
+        if let Some(ret_ty) = &function.as_ref().signature.as_ref().ret_ty {
             self.extract_generic_params(ret_ty, &mut generic_params);
         }
 
@@ -1713,6 +1691,14 @@ impl TypeChecker {
             }
             Statement::TypeAlias { .. } => {
                 // Type aliases are handled at the module level
+                Ok(TypeInfo::Unit)
+            }
+            Statement::Trait { .. } => {
+                // Traits are handled at the module level
+                Ok(TypeInfo::Unit)
+            }
+            Statement::Impl { .. } => {
+                // Implementations are handled at the module level
                 Ok(TypeInfo::Unit)
             }
             Statement::Block(block) => self.check_block(block),
@@ -2872,11 +2858,15 @@ impl TypeChecker {
         for statement in &program.statements {
             match statement.as_ref() {
                 Statement::Function(function) if function.as_ref().public => {
-                    if let Some(sig) = self.context.functions.get(&function.as_ref().name).cloned()
+                    if let Some(sig) = self
+                        .context
+                        .functions
+                        .get(&function.as_ref().signature.as_ref().name)
+                        .cloned()
                     {
                         exports
                             .functions
-                            .insert(function.as_ref().name.clone(), sig);
+                            .insert(function.as_ref().signature.as_ref().name.clone(), sig);
                     }
                 }
                 Statement::Struct { name, public, .. } if *public => {

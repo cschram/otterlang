@@ -159,8 +159,8 @@ impl Default for TypecheckWorkspace {
 mod tests {
     use super::*;
     use otterc_ast::nodes::{
-        BinaryOp, Block, Expr, Function, Literal, Node, NumberLiteral, Param, Program, Statement,
-        Type, UseImport,
+        BinaryOp, Block, Expr, Function, FunctionSignature, Literal, Node, NumberLiteral, Param,
+        Program, Statement, Type, UseImport,
     };
 
     fn span() -> Span {
@@ -180,16 +180,21 @@ mod tests {
     #[test]
     fn workspace_produces_per_module_diagnostics() {
         let mut math_fn = Function::new(
-            "add_one",
-            vec![Node::new(
-                Param::new(
-                    Node::new("value".to_string(), span()),
+            Node::new(
+                FunctionSignature::new(
+                    "add_one",
+                    vec![Node::new(
+                        Param::new(
+                            Node::new("value".to_string(), span()),
+                            Some(Node::new(Type::Simple("int".into()), span())),
+                            None,
+                        ),
+                        span(),
+                    )],
                     Some(Node::new(Type::Simple("int".into()), span())),
-                    None,
                 ),
                 span(),
-            )],
-            Some(Node::new(Type::Simple("int".into()), span())),
+            ),
             Node::new(
                 Block {
                     statements: vec![Node::new(
@@ -216,7 +221,7 @@ mod tests {
             span(),
         )]);
 
-        let mut workspace = TypecheckWorkspace::new();
+        let mut workspace = TypecheckWorkspace::default();
         workspace
             .analyze_module("math", math_program)
             .expect("math module should type-check");
@@ -238,9 +243,14 @@ mod tests {
             span(),
         );
         let mut entry_fn = Function::new(
-            "main",
-            Vec::new(),
-            Some(Node::new(Type::Simple("int".into()), span())),
+            Node::new(
+                FunctionSignature::new(
+                    "main",
+                    Vec::new(),
+                    Some(Node::new(Type::Simple("int".into()), span())),
+                ),
+                span(),
+            ),
             Node::new(
                 Block {
                     statements: vec![Node::new(Statement::Return(Some(call_expr)), span())],

@@ -75,15 +75,7 @@ impl<'ctx> Compiler<'ctx> {
             | Statement::Let { expr, .. }
             | Statement::Assignment { expr, .. }
             | Statement::Return(Some(expr)) => self.record_expr_spans(expr),
-            Statement::Return(None)
-            | Statement::Break
-            | Statement::Continue
-            | Statement::Pass
-            | Statement::Use { .. }
-            | Statement::PubUse { .. }
-            | Statement::Enum { .. }
-            | Statement::TypeAlias { .. } => {}
-            Statement::Struct { methods, .. } => {
+            Statement::Impl { methods, .. } => {
                 for method in methods {
                     self.record_function_spans(method.as_ref());
                 }
@@ -114,6 +106,7 @@ impl<'ctx> Compiler<'ctx> {
                 self.record_block_spans(body.as_ref());
             }
             Statement::Block(block) => self.record_block_spans(block.as_ref()),
+            _ => {}
         }
     }
 
@@ -331,7 +324,7 @@ impl<'ctx> Compiler<'ctx> {
         method_func: &mut otterc_ast::nodes::Function,
         struct_name: &str,
     ) {
-        let Some(first_param) = method_func.params.first_mut() else {
+        let Some(first_param) = method_func.signature.as_mut().params.first_mut() else {
             return;
         };
 
@@ -383,12 +376,7 @@ impl<'ctx> Compiler<'ctx> {
                 Statement::Function(func) => {
                     self.register_function_prototype(func.as_ref())?;
                 }
-                Statement::Struct {
-                    name,
-                    fields,
-                    methods,
-                    ..
-                } => {
+                Statement::Struct { name, fields, .. } => {
                     let (struct_id, struct_type) = self.ensure_struct_info(name);
 
                     let mut field_layout = Vec::new();
@@ -405,12 +393,16 @@ impl<'ctx> Compiler<'ctx> {
                         info.field_indices = field_indices;
                         info.field_types = field_types;
                     }
-
+                }
+                Statement::Impl {
+                    type_name, methods, ..
+                } => {
                     // Register methods
                     for method in methods {
                         let mut method_func = method.as_ref().clone();
-                        method_func.name = format!("{}_{}", name, method_func.name);
-                        self.rewrite_method_self_param(&mut method_func, name);
+                        method_func.signature.as_mut().name =
+                            format!("{}_{}", type_name, method_func.signature.as_ref().name);
+                        self.rewrite_method_self_param(&mut method_func, type_name);
                         self.register_function_prototype(&method_func)?;
                     }
                 }
@@ -425,11 +417,14 @@ impl<'ctx> Compiler<'ctx> {
                     self.record_function_spans(func.as_ref());
                     self.compile_function(func.as_ref())?;
                 }
-                Statement::Struct { name, methods, .. } => {
+                Statement::Impl {
+                    type_name, methods, ..
+                } => {
                     for method in methods {
                         let mut method_func = method.as_ref().clone();
-                        method_func.name = format!("{}_{}", name, method_func.name);
-                        self.rewrite_method_self_param(&mut method_func, name);
+                        method_func.signature.as_mut().name =
+                            format!("{}_{}", type_name, method_func.signature.as_ref().name);
+                        self.rewrite_method_self_param(&mut method_func, type_name);
                         self.record_function_spans(&method_func);
                         self.compile_function(&method_func)?;
                     }
@@ -684,7 +679,8 @@ impl<'ctx> Compiler<'ctx> {
     }
 
     fn register_function_prototype(&mut self, func: &otterc_ast::nodes::Function) -> Result<()> {
-        let ret_type: Option<BasicTypeEnum> = if let Some(ret_ty) = &func.ret_ty {
+        let ret_type: Option<BasicTypeEnum> = if let Some(ret_ty) = &func.signature.as_ref().ret_ty
+        {
             let mapped_ty = self.map_ast_type(ret_ty.as_ref())?;
             // Check if it's effectively unit/void
             if let otterc_ast::nodes::Type::Simple(name) = ret_ty.as_ref() {
@@ -701,7 +697,7 @@ impl<'ctx> Compiler<'ctx> {
         };
 
         let mut param_types = Vec::new();
-        for param in &func.params {
+        for param in &func.signature.as_ref().params {
             if let Some(ty) = &param.as_ref().ty {
                 param_types.push(self.map_ast_type(ty.as_ref())?.into());
             } else {
@@ -716,30 +712,34 @@ impl<'ctx> Compiler<'ctx> {
             self.context.void_type().fn_type(&param_types, false)
         };
 
-        let llvm_name = if func.name == "main" {
+        let llvm_name = if func.signature.as_ref().name == "main" {
             "otter_entry"
         } else {
-            &func.name
+            &func.signature.as_ref().name
         };
         let function = self.module.add_function(llvm_name, fn_type, None);
-        self.declared_functions.insert(func.name.clone(), function);
+        self.declared_functions
+            .insert(func.signature.as_ref().name.clone(), function);
 
         // Store return type for later use in eval_call_expr
-        let ret_otter_type = if let Some(ret_ty) = &func.ret_ty {
+        let ret_otter_type = if let Some(ret_ty) = &func.signature.as_ref().ret_ty {
             self.otter_type_from_annotation(ret_ty.as_ref())
         } else {
             OtterType::Unit
         };
         self.function_return_types
-            .insert(func.name.clone(), ret_otter_type);
+            .insert(func.signature.as_ref().name.clone(), ret_otter_type);
 
         // Store default values
         let defaults: Vec<Option<Expr>> = func
+            .signature
+            .as_ref()
             .params
             .iter()
             .map(|p| p.as_ref().default.as_ref().map(|e| e.as_ref().clone()))
             .collect();
-        self.function_defaults.insert(func.name.clone(), defaults);
+        self.function_defaults
+            .insert(func.signature.as_ref().name.clone(), defaults);
 
         Ok(())
     }
@@ -747,8 +747,8 @@ impl<'ctx> Compiler<'ctx> {
     fn compile_function(&mut self, func: &otterc_ast::nodes::Function) -> Result<()> {
         let function = self
             .declared_functions
-            .get(&func.name)
-            .ok_or_else(|| anyhow!("Function {} not found", func.name))?;
+            .get(&func.signature.as_ref().name)
+            .ok_or_else(|| anyhow!("Function {} not found", func.signature.as_ref().name))?;
 
         let entry = self.context.append_basic_block(*function, "entry");
         self.builder.position_at_end(entry);
@@ -756,7 +756,7 @@ impl<'ctx> Compiler<'ctx> {
         let mut ctx = FunctionContext::new();
 
         // Bind arguments
-        for (i, param) in func.params.iter().enumerate() {
+        for (i, param) in func.signature.as_ref().params.iter().enumerate() {
             let arg_val = function.get_nth_param(i as u32).unwrap();
             let param_name = &param.as_ref().name;
 
@@ -797,7 +797,7 @@ impl<'ctx> Compiler<'ctx> {
             .and_then(|b| b.get_terminator())
             .is_none()
         {
-            match func.ret_ty {
+            match func.signature.as_ref().ret_ty {
                 None => {
                     self.builder.build_return(None)?;
                 }

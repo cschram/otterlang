@@ -203,8 +203,8 @@ impl JitEngine {
         // Extract function definitions from program
         for stmt in &program.statements {
             if let Statement::Function(func) = stmt.as_ref() {
-                let func_name = &func.as_ref().name;
-                let arg_count = func.as_ref().params.len();
+                let func_name = &func.as_ref().signature.as_ref().name;
+                let arg_count = func.as_ref().signature.as_ref().params.len();
 
                 // Try to load function with different signatures
                 let func_ptr = self.load_function_symbol(&library, func_name, arg_count)?;
@@ -363,11 +363,15 @@ impl JitEngine {
                 .statements
                 .iter()
                 .find_map(|stmt| match stmt.as_ref() {
-                    Statement::Function(f) if f.as_ref().name == hot_func.name => Some(f),
+                    Statement::Function(f)
+                        if f.as_ref().signature.as_ref().name == hot_func.name =>
+                    {
+                        Some(f)
+                    }
                     _ => None,
                 })
             {
-                let arg_count = func.as_ref().params.len();
+                let arg_count = func.as_ref().signature.as_ref().params.len();
                 if let Ok(func_ptr) = self.load_function_symbol(&library, &hot_func.name, arg_count)
                 {
                     let mut functions = self.compiled_functions.lock().unwrap();

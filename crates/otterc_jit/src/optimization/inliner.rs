@@ -80,7 +80,7 @@ impl Inliner {
 
         for stmt in &mut optimized.statements {
             if let Statement::Function(func) = stmt.as_mut() {
-                let mut stack = vec![func.as_ref().name.clone()];
+                let mut stack = vec![func.as_ref().signature.as_ref().name.clone()];
                 self.inline_function(func, &ctx, &mut stack, &mut stats, 0);
             }
         }
@@ -99,7 +99,7 @@ impl Inliner {
         if depth >= self.config.max_depth {
             return;
         }
-        let name = function.as_ref().name.clone();
+        let name = function.as_ref().signature.as_ref().name.clone();
         let current_hot = ctx.hot_functions.contains(&name);
         self.inline_block(
             &mut function.as_mut().body,
@@ -583,7 +583,7 @@ impl Inliner {
             return None;
         };
 
-        if args.len() != callee.as_ref().params.len() {
+        if args.len() != callee.as_ref().signature.as_ref().params.len() {
             stats.skipped_complex += 1;
             return None;
         }
@@ -707,7 +707,7 @@ impl Inliner {
         let mut map = HashMap::new();
         for stmt in &program.statements {
             if let Statement::Function(func) = stmt.as_ref() {
-                map.insert(func.as_ref().name.clone(), func.clone());
+                map.insert(func.as_ref().signature.as_ref().name.clone(), func.clone());
             }
         }
         map
@@ -752,7 +752,7 @@ impl InlineBuilder {
     fn build_snippet(&mut self, callee: &Node<Function>, args: &[Node<Expr>]) -> BuiltSnippet {
         let mut statements = Vec::new();
         let inline_id = self.names.id();
-        for (idx, param) in callee.as_ref().params.iter().enumerate() {
+        for (idx, param) in callee.as_ref().signature.as_ref().params.iter().enumerate() {
             let arg = args[idx].clone();
             let param_name = self.names.register_param(
                 param.as_ref().name.as_ref(),

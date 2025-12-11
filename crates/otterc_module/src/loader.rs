@@ -115,7 +115,7 @@ impl ModuleLoader {
             match statement.as_ref() {
                 Statement::Function(function) => {
                     if function.as_ref().public {
-                        exports.add_function(function.as_ref().name.clone());
+                        exports.add_function(function.as_ref().signature.as_ref().name.clone());
                     }
                 }
                 Statement::Let { name, public, .. } => {

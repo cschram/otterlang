@@ -34,6 +34,8 @@ pub enum TokenKind {
     Enum,
     And,
     Or,
+    Trait,
+    Impl,
 
     // Identifiers
     Identifier(String),
@@ -122,6 +124,8 @@ impl Hash for TokenKind {
             TokenKind::Enum => 26u16.hash(state),
             TokenKind::And => 27u16.hash(state),
             TokenKind::Or => 28u16.hash(state),
+            TokenKind::Trait => 29u16.hash(state),
+            TokenKind::Impl => 30u16.hash(state),
 
             // Identifiers
             TokenKind::Identifier(name) => {
@@ -232,6 +236,8 @@ impl TokenKind {
             TokenKind::Enum => "enum",
             TokenKind::And => "and",
             TokenKind::Or => "or",
+            TokenKind::Trait => "trait",
+            TokenKind::Impl => "impl",
 
             // Identifiers
             TokenKind::Identifier(_) => "identifier",
@@ -362,6 +368,8 @@ impl Token {
                 | TokenKind::Enum
                 | TokenKind::And
                 | TokenKind::Or
+                | TokenKind::Trait
+                | TokenKind::Impl
         )
     }
 

@@ -20,7 +20,8 @@ impl CallGraph {
 
     pub fn analyze_function(&mut self, function: &Function) {
         let callees = self.extract_callees(function.body.as_ref());
-        self.calls.insert(function.name.clone(), callees);
+        self.calls
+            .insert(function.signature.as_ref().name.clone(), callees);
     }
 
     fn extract_callees(&self, block: &Block) -> Vec<String> {
