@@ -41,10 +41,10 @@ pub fn visit<E>(program: &Program, visitor: &mut impl Visitor<E>) -> Result<(), 
 fn visit_statement<E>(stmt: &Node<Statement>, visitor: &mut impl Visitor<E>) -> Result<(), E> {
     visitor.visit_statement(stmt)?;
     match stmt.as_ref() {
-        Statement::Let { expr, .. } => {
-            visit_expression(expr, visitor)?;
-        }
-        Statement::Assignment { expr, .. } => {
+        Statement::Let { expr, .. }
+        | Statement::Assignment { expr, .. }
+        | Statement::Expr(expr)
+        | Statement::Return(Some(expr)) => {
             visit_expression(expr, visitor)?;
         }
         Statement::If {
@@ -71,16 +71,10 @@ fn visit_statement<E>(stmt: &Node<Statement>, visitor: &mut impl Visitor<E>) -> 
             visit_expression(cond, visitor)?;
             visit_block(body, visitor)?;
         }
-        Statement::Return(Some(expr)) => {
-            visit_expression(expr, visitor)?;
-        }
         Statement::Struct { methods, .. } => {
             for method in methods {
                 visit_function(method, visitor)?;
             }
-        }
-        Statement::Expr(expr) => {
-            visit_expression(expr, visitor)?;
         }
         Statement::Block(block) => {
             visit_block(block, visitor)?;
@@ -106,7 +100,7 @@ fn visit_expression<E>(expr: &Node<Expr>, visitor: &mut impl Visitor<E>) -> Resu
             visit_expression(left, visitor)?;
             visit_expression(right, visitor)?;
         }
-        Expr::Unary { expr, .. } => {
+        Expr::Unary { expr, .. } | Expr::Await(expr) | Expr::Spawn(expr) => {
             visit_expression(expr, visitor)?;
         }
         Expr::If {
@@ -177,12 +171,6 @@ fn visit_expression<E>(expr: &Node<Expr>, visitor: &mut impl Visitor<E>) -> Resu
                     visit_expression(expr, visitor)?;
                 }
             }
-        }
-        Expr::Await(expr) => {
-            visit_expression(expr, visitor)?;
-        }
-        Expr::Spawn(expr) => {
-            visit_expression(expr, visitor)?;
         }
         Expr::Struct { fields, .. } => {
             for (_, expr) in fields {
@@ -280,10 +268,10 @@ fn visit_statement_mut<E>(
 ) -> Result<(), E> {
     visitor.visit_statement(stmt)?;
     match stmt.as_mut() {
-        Statement::Let { expr, .. } => {
-            visit_expression_mut(expr, visitor)?;
-        }
-        Statement::Assignment { expr, .. } => {
+        Statement::Let { expr, .. }
+        | Statement::Assignment { expr, .. }
+        | Statement::Return(Some(expr))
+        | Statement::Expr(expr) => {
             visit_expression_mut(expr, visitor)?;
         }
         Statement::If {
@@ -310,16 +298,10 @@ fn visit_statement_mut<E>(
             visit_expression_mut(cond, visitor)?;
             visit_block_mut(body, visitor)?;
         }
-        Statement::Return(Some(expr)) => {
-            visit_expression_mut(expr, visitor)?;
-        }
         Statement::Struct { methods, .. } => {
             for method in methods {
                 visit_function_mut(method, visitor)?;
             }
-        }
-        Statement::Expr(expr) => {
-            visit_expression_mut(expr, visitor)?;
         }
         Statement::Block(block) => {
             visit_block_mut(block, visitor)?;
@@ -348,7 +330,7 @@ fn visit_expression_mut<E>(
             visit_expression_mut(left, visitor)?;
             visit_expression_mut(right, visitor)?;
         }
-        Expr::Unary { expr, .. } => {
+        Expr::Unary { expr, .. } | Expr::Await(expr) | Expr::Spawn(expr) => {
             visit_expression_mut(expr, visitor)?;
         }
         Expr::If {
@@ -419,12 +401,6 @@ fn visit_expression_mut<E>(
                     visit_expression_mut(expr, visitor)?;
                 }
             }
-        }
-        Expr::Await(expr) => {
-            visit_expression_mut(expr, visitor)?;
-        }
-        Expr::Spawn(expr) => {
-            visit_expression_mut(expr, visitor)?;
         }
         Expr::Struct { fields, .. } => {
             for (_, expr) in fields {
