@@ -2076,13 +2076,13 @@ impl<'ctx> Compiler<'ctx> {
             let then_ty = then_val.ty.clone();
             let else_ty = else_val.ty.clone();
 
-            if then_ty == else_ty && then_val.value.is_some() && else_val.value.is_some() {
+            if then_ty == else_ty
+                && let Some(then_val) = then_val.value
+                && else_val.value.is_some()
+            {
                 if let Some(basic_ty) = self.basic_type(then_ty.clone())? {
                     let phi = self.builder.build_phi(basic_ty, "if_result")?;
-                    phi.add_incoming(&[
-                        (&then_val.value.unwrap(), then_bb_end),
-                        (&else_val.value.unwrap(), else_bb_end),
-                    ]);
+                    phi.add_incoming(&[(&then_val, then_bb_end), (&then_val, else_bb_end)]);
                     Ok(EvaluatedValue::with_value(phi.as_basic_value(), then_ty))
                 } else {
                     // Unit type

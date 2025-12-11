@@ -797,27 +797,30 @@ impl<'ctx> Compiler<'ctx> {
             .and_then(|b| b.get_terminator())
             .is_none()
         {
-            if func.ret_ty.is_none() {
-                self.builder.build_return(None)?;
-            } else {
-                let ret_ty = func.ret_ty.as_ref().unwrap();
-                let llvm_ty = self.map_ast_type(ret_ty.as_ref())?;
+            match func.ret_ty {
+                None => {
+                    self.builder.build_return(None)?;
+                }
 
-                let default_val: inkwell::values::BasicValueEnum = match llvm_ty {
-                    BasicTypeEnum::IntType(t) => t.const_zero().into(),
-                    BasicTypeEnum::FloatType(t) => t.const_zero().into(),
-                    BasicTypeEnum::PointerType(t) => t.const_null().into(),
-                    BasicTypeEnum::StructType(t) => t.const_zero().into(), // For unit/void which might be mapped to struct or i8
-                    BasicTypeEnum::ArrayType(t) => t.const_zero().into(),
-                    BasicTypeEnum::VectorType(t) => t.const_zero().into(),
-                    _ => {
-                        // For other types (like pointers to structs/arrays), return null/zero
-                        // This is safer than crashing, though ideally we'd have specific default values
-                        llvm_ty.const_zero()
-                    }
-                };
+                Some(ref ret_ty) => {
+                    let llvm_ty = self.map_ast_type(ret_ty.as_ref())?;
 
-                self.builder.build_return(Some(&default_val))?;
+                    let default_val: inkwell::values::BasicValueEnum = match llvm_ty {
+                        BasicTypeEnum::IntType(t) => t.const_zero().into(),
+                        BasicTypeEnum::FloatType(t) => t.const_zero().into(),
+                        BasicTypeEnum::PointerType(t) => t.const_null().into(),
+                        BasicTypeEnum::StructType(t) => t.const_zero().into(), // For unit/void which might be mapped to struct or i8
+                        BasicTypeEnum::ArrayType(t) => t.const_zero().into(),
+                        BasicTypeEnum::VectorType(t) => t.const_zero().into(),
+                        _ => {
+                            // For other types (like pointers to structs/arrays), return null/zero
+                            // This is safer than crashing, though ideally we'd have specific default values
+                            llvm_ty.const_zero()
+                        }
+                    };
+
+                    self.builder.build_return(Some(&default_val))?;
+                }
             }
         }
 

@@ -416,7 +416,7 @@ pub fn compile_pipeline(
     if settings.dump_tokens {
         println!("\n{}", "== Tokens ==".bold());
         for token in &tokens {
-            println!("  {:?} @ {:?}", token.kind, token.span);
+            println!("  {:?} @ {:?}", token.kind(), token.span());
         }
     }
 
@@ -628,7 +628,7 @@ impl GcCliOptions {
             Some(value) => Some(
                 value
                     .parse::<GcStrategy>()
-                    .map_err(|_| anyhow!("invalid GC strategy '{}'", value))?,
+                    .or(Err(anyhow!("invalid GC strategy '{}'", value)))?,
             ),
             None => None,
         };
