@@ -1,58 +1,14 @@
+use crate::error::ParserError;
 use chumsky::Stream;
 use chumsky::prelude::*;
-
 use otterc_ast::nodes::{
     BinaryOp, Block, EnumVariant, Expr, FStringPart, Function, FunctionSignature, Literal,
     MatchArm, Node, NumberLiteral, Param, Pattern, Program, Statement, TraitMethod, Type, UnaryOp,
     UseImport,
 };
-
 use otterc_lexer::token::{Token, TokenKind};
 use otterc_span::Span;
-use otterc_utils::errors::{Diagnostic, DiagnosticSeverity};
 use std::ops::Range;
-
-#[derive(Debug, Clone)]
-pub struct ParserError {
-    pub message: String,
-    pub span: Span,
-}
-
-impl ParserError {
-    pub fn to_diagnostic(&self, source_id: &str) -> Diagnostic {
-        let mut diag = Diagnostic::new(
-            DiagnosticSeverity::Error,
-            source_id,
-            self.span,
-            self.message.clone(),
-        );
-
-        // Add suggestions based on error message
-        if self.message.contains("unexpected token") {
-            diag = diag.with_suggestion("Check for missing or extra tokens, or syntax errors")
-                .with_help("Ensure all statements are properly terminated and parentheses/brackets are balanced.");
-        } else if self.message.contains("unexpected end of input") {
-            diag = diag
-                .with_suggestion("Check for missing closing brackets, parentheses, or quotes")
-                .with_help("The parser reached the end of the file while expecting more tokens.");
-        }
-
-        diag
-    }
-}
-
-impl From<Simple<TokenKind>> for ParserError {
-    fn from(value: Simple<TokenKind>) -> Self {
-        let span_range = value.span();
-        let span = Span::new(span_range.start, span_range.end);
-        let message = if let Some(found) = value.found() {
-            format!("unexpected token: {:?}", found)
-        } else {
-            "unexpected end of input".to_string()
-        };
-        Self { message, span }
-    }
-}
 
 pub fn parse(tokens: &[Token]) -> Result<Program, Vec<ParserError>> {
     let parser = program_parser();
@@ -259,6 +215,7 @@ fn literal_expr_parser() -> impl Parser<TokenKind, Node<Expr>, Error = Simple<To
             Node::new(Expr::Literal(Node::new(lit, span)), span)
         })
         .boxed();
+
     let number_lit = select! { TokenKind::Number(value) => {
         // Remove underscores from the number
         let clean_value = value.replace('_', "");
@@ -285,6 +242,7 @@ fn literal_expr_parser() -> impl Parser<TokenKind, Node<Expr>, Error = Simple<To
         )
     })
     .boxed();
+
     let bool_lit = select! {
         TokenKind::True => Literal::Bool(true),
         TokenKind::False => Literal::Bool(false),
@@ -294,6 +252,7 @@ fn literal_expr_parser() -> impl Parser<TokenKind, Node<Expr>, Error = Simple<To
         Node::new(Expr::Literal(Node::new(lit, span)), span)
     })
     .boxed();
+
     let none_lit = just(TokenKind::None)
         .to(Literal::None)
         .map_with_span(|lit, span: Range<usize>| {
@@ -301,8 +260,10 @@ fn literal_expr_parser() -> impl Parser<TokenKind, Node<Expr>, Error = Simple<To
             Node::new(Expr::Literal(Node::new(lit, span)), span)
         })
         .boxed();
+
     let fstring_lit =
         select! { |span| TokenKind::FString(content) => parse_fstring(content, span) }.boxed();
+
     let unit_lit = just(TokenKind::LParen)
         .then(just(TokenKind::RParen))
         .map_with_span(|_, span: Range<usize>| {
@@ -310,6 +271,7 @@ fn literal_expr_parser() -> impl Parser<TokenKind, Node<Expr>, Error = Simple<To
             Node::new(Expr::Literal(Node::new(Literal::Unit, span)), span)
         })
         .boxed();
+
     choice((
         fstring_lit,
         string_lit,
@@ -322,10 +284,7 @@ fn literal_expr_parser() -> impl Parser<TokenKind, Node<Expr>, Error = Simple<To
 
 fn expr_parser() -> impl Parser<TokenKind, Node<Expr>, Error = Simple<TokenKind>> {
     recursive(|expr| {
-        // Lambda expressions removed - use anonymous fn syntax instead
-        // fn(<args>) expr or fn(<args>): <stmts>
-
-        let struct_init_pythonic = identifier_parser()
+        let struct_init = identifier_parser()
             .then(
                 // Keyword argument: name=value
                 identifier_parser()
@@ -394,7 +353,7 @@ fn expr_parser() -> impl Parser<TokenKind, Node<Expr>, Error = Simple<TokenKind>
 
         let atom = choice((
             literal_expr_parser(),
-            struct_init_pythonic,
+            struct_init,
             identifier_parser().map_with_span(|name, span| Node::new(Expr::Identifier(name), span)),
             expr.clone()
                 .delimited_by(just(TokenKind::LParen), just(TokenKind::RParen)),
@@ -1249,17 +1208,13 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
         .then_ignore(newline.clone().or_not())
         .boxed();
 
-    //     field: Type
-    //     fn method(self, ...) -> ReturnType:
-    //         ...
-    let struct_generics = || {
-        identifier_parser()
-            .separated_by(just(TokenKind::Comma))
-            .allow_trailing()
-            .delimited_by(just(TokenKind::Lt), just(TokenKind::Gt))
-            .or_not()
-            .map(|params| params.unwrap_or_default())
-    };
+    let struct_generics = identifier_parser()
+        .separated_by(just(TokenKind::Comma))
+        .allow_trailing()
+        .delimited_by(just(TokenKind::Lt), just(TokenKind::Gt))
+        .or_not()
+        .map(|params| params.unwrap_or_default())
+        .boxed();
 
     let enum_variant_name = choice((
         identifier_parser(),
@@ -1313,7 +1268,7 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
         .clone()
         .then(just(TokenKind::Struct))
         .then(identifier_parser())
-        .then(struct_generics())
+        .then(struct_generics.clone())
         .then_ignore(just(TokenKind::Colon))
         .then_ignore(newline.clone())
         .then(struct_body.delimited_by(just(TokenKind::Indent), just(TokenKind::Dedent)))
@@ -1335,7 +1290,7 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
         .clone()
         .then(just(TokenKind::Enum))
         .then(identifier_parser())
-        .then(struct_generics())
+        .then(struct_generics.clone())
         .then_ignore(just(TokenKind::Colon))
         .then_ignore(newline.clone())
         .then(enum_body.delimited_by(just(TokenKind::Indent), just(TokenKind::Dedent)))
@@ -1384,9 +1339,9 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
         .boxed();
 
     let trait_def = pub_keyword
-        .then(just(TokenKind::Trait))
+        .then_ignore(just(TokenKind::Trait))
         .then(identifier_parser())
-        .then(struct_generics())
+        .then(struct_generics)
         .then_ignore(just(TokenKind::Colon))
         .then_ignore(newline.clone())
         .then(
@@ -1409,7 +1364,7 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
                 .at_least(1),
         )
         .delimited_by(just(TokenKind::Indent), just(TokenKind::Dedent))
-        .map_with_span(|((((pub_kw, _), name), generics), methods), span| {
+        .map_with_span(|(((pub_kw, name), generics), methods), span| {
             Node::new(
                 Statement::Trait {
                     name,
@@ -1436,7 +1391,7 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
             ))
             .repeated(),
         )
-        .then_ignore(newline.repeated().or_not())
+        .then_ignore(newline.clone().or_not())
         .then_ignore(just(TokenKind::Eof))
         .map(Program::new)
 }

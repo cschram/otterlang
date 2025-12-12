@@ -5,6 +5,7 @@
 //! This API is completely unstable and subject to change.
 
 use core::ops::Range;
+use std::fmt::Display;
 
 /// A range typically used to define a slice of source-text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -83,5 +84,11 @@ impl From<Range<usize>> for Span {
     #[inline]
     fn from(range: Range<usize>) -> Self {
         Self::new(range.start, range.end)
+    }
+}
+
+impl Display for Span {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Span({}..{})", self.start, self.end)
     }
 }
