@@ -197,7 +197,7 @@ mod tests {
                             Expr::Binary {
                                 op: BinaryOp::Add,
                                 left: Box::new(Node::new(
-                                    Expr::Identifier("value".to_string()),
+                                    Expr::Access(vec!["value".to_string()]),
                                     span(),
                                 )),
                                 right: Box::new(literal_int(1)),
@@ -227,10 +227,7 @@ mod tests {
         let call_expr = Node::new(
             Expr::Call {
                 func: Box::new(Node::new(
-                    Expr::Member {
-                        object: Box::new(Node::new(Expr::Identifier("math".to_string()), span())),
-                        field: "add_one".to_string(),
-                    },
+                    Expr::Access(vec!["math".to_string(), "add_one".to_string()]),
                     span(),
                 )),
                 args: vec![literal_int(41)],

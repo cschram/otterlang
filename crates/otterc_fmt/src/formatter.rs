@@ -52,12 +52,12 @@ impl Formatter {
                     self.format_expr(expr, indent)
                 )
             }
-            Statement::Assignment { name, expr, .. } => {
+            Statement::Assignment { lhs, rhs, .. } => {
                 format!(
                     "{}{} = {}\n",
                     self.indent(indent),
-                    name,
-                    self.format_expr(expr, indent)
+                    self.format_expr(lhs, indent),
+                    self.format_expr(rhs, indent)
                 )
             }
             Statement::Function(f) => self.format_function(f, indent),
@@ -318,7 +318,7 @@ impl Formatter {
     fn format_expr(&self, expr: &Node<Expr>, indent: usize) -> String {
         match expr.as_ref() {
             Expr::Literal(lit) => self.format_literal(lit),
-            Expr::Identifier(name) => name.clone(),
+            Expr::Access(identifiers) => identifiers.join("."),
             Expr::Binary { op, left, right } => {
                 format!(
                     "{} {} {}",
@@ -341,9 +341,6 @@ impl Formatter {
                     .collect::<Vec<_>>()
                     .join(", ");
                 format!("{}({})", self.format_expr(func, indent), args_str)
-            }
-            Expr::Member { object, field } => {
-                format!("{}.{}", self.format_expr(object, indent), field)
             }
             Expr::If {
                 cond,

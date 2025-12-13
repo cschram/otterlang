@@ -340,10 +340,12 @@ impl TypeChecker {
         expr_ids: &mut Vec<usize>,
     ) {
         match stmt {
-            Statement::Expr(expr)
-            | Statement::Let { expr, .. }
-            | Statement::Assignment { expr, .. } => {
+            Statement::Expr(expr) | Statement::Let { expr, .. } => {
                 self.collect_metadata_in_expr(expr, spans, expr_ids);
+            }
+            Statement::Assignment { lhs, rhs } => {
+                self.collect_metadata_in_expr(lhs, spans, expr_ids);
+                self.collect_metadata_in_expr(rhs, spans, expr_ids);
             }
             Statement::Return(Some(expr)) => self.collect_metadata_in_expr(expr, spans, expr_ids),
             Statement::Return(None)
@@ -427,10 +429,7 @@ impl TypeChecker {
                 self.collect_metadata_in_expr(left, spans, expr_ids);
                 self.collect_metadata_in_expr(right, spans, expr_ids);
             }
-            Expr::Unary { expr, .. }
-            | Expr::Await(expr)
-            | Expr::Spawn(expr)
-            | Expr::Member { object: expr, .. } => {
+            Expr::Unary { expr, .. } | Expr::Await(expr) | Expr::Spawn(expr) => {
                 self.collect_metadata_in_expr(expr, spans, expr_ids);
             }
             Expr::Call { func, args } => {
@@ -486,7 +485,7 @@ impl TypeChecker {
                     self.collect_metadata_in_expr(value, spans, expr_ids);
                 }
             }
-            Expr::Literal(_) | Expr::Identifier(_) => {}
+            Expr::Literal(_) | Expr::Access(_) => {}
         }
     }
 
@@ -925,10 +924,21 @@ impl TypeChecker {
         func: &Node<Expr>,
         args: &[Node<Expr>],
     ) -> Result<Option<TypeInfo>> {
-        if let Expr::Member { object, field } = func.as_ref()
-            && let Expr::Identifier(enum_name) = object.as_ref().as_ref()
+        if let Expr::Access(identifiers) = func.as_ref()
+            && let Some(enum_name) = identifiers.first()
             && let Some(definition) = self.context.get_enum(enum_name).cloned()
         {
+            if identifiers.len() != 2 {
+                self.errors.push(
+                    TypeError::new(format!(
+                        "enum constructor for '{}' must access a variant",
+                        enum_name
+                    ))
+                    .with_span(*func.span()),
+                );
+                return Ok(Some(TypeInfo::Error));
+            }
+            let field = identifiers.get(1).unwrap();
             let Some(variant) = definition
                 .variants
                 .iter()
@@ -936,7 +946,7 @@ impl TypeChecker {
             else {
                 self.errors.push(
                     TypeError::new(format!("enum '{}' has no variant '{}'", enum_name, field))
-                        .with_span(*object.span()),
+                        .with_span(*func.span()),
                 );
                 return Ok(Some(TypeInfo::Error));
             };
@@ -951,7 +961,7 @@ impl TypeChecker {
                         expected_len,
                         args.len()
                     ))
-                    .with_span(*object.span()),
+                    .with_span(*func.span()),
                 );
             }
 
@@ -1521,34 +1531,32 @@ impl TypeChecker {
                 }
                 Ok(TypeInfo::Unit)
             }
-            Statement::Assignment { name, expr } => {
-                let var_type = self
-                    .context
-                    .get_variable(name.as_ref())
-                    .ok_or_else(|| {
-                        TypeError::new(format!("undefined variable: {}", name))
-                            .with_hint(format!("did you mean to declare it with `let {}`?", name))
-                            .with_help(
-                                "Variables must be declared with `let` before they can be assigned"
-                                    .to_string(),
-                            )
-                            .with_span(*span)
-                    })?
-                    .clone();
-
-                let expr_type = self.infer_expr_type(expr)?;
-                if !expr_type.is_compatible_with(&var_type) {
-                    self.errors.push(TypeError::new(format!(
+            Statement::Assignment { lhs, rhs } => {
+                if let Expr::Access(identifiers) = lhs.as_ref() {
+                    let lhs_type = self.infer_member_type(lhs)?;
+                    let rhs_type = self.infer_expr_type(rhs)?;
+                    if !rhs_type.is_compatible_with(&lhs_type) {
+                        self.errors.push(TypeError::new(format!(
                         "cannot assign {} to {} (expected {})",
-                        expr_type.display_name(),
-                        name,
-                        var_type.display_name()
+                        rhs_type.display_name(),
+                        identifiers.join("."),
+                        lhs_type.display_name()
                     ))
-                    .with_hint(format!("The variable `{}` is declared as `{}`, but you're trying to assign a value of type `{}`", name, var_type.display_name(), expr_type.display_name()))
+                    .with_hint(format!("The variable `{}` is declared as `{}`, but you're trying to assign a value of type `{}`", identifiers.join("."), lhs_type.display_name(), rhs_type.display_name()))
                     .with_help("Make sure the types match or are compatible (e.g., i32 can be promoted to i64 or f64)".to_string())
                     .with_span(*span));
+                    }
+                    Ok(TypeInfo::Unit)
+                } else {
+                    self.errors.push(
+                        TypeError::new(
+                            "left-hand side of assignment must be a variable or member access"
+                                .to_string(),
+                        )
+                        .with_span(*span),
+                    );
+                    return Ok(TypeInfo::Error);
                 }
-                Ok(TypeInfo::Unit)
             }
             Statement::If {
                 cond,
@@ -1736,27 +1744,70 @@ impl TypeChecker {
                     Literal::Bool(_) => TypeInfo::Bool,
                     Literal::None | Literal::Unit => TypeInfo::Unit,
                 }),
-                Expr::Identifier(name) => {
-                    if let Some(var_type) = self.context.get_variable(name) {
-                        Ok(var_type.clone())
+                Expr::Access(identifiers) => {
+                    if identifiers.is_empty() {
+                        // Something went wrong with parsing to get here
+                        return Ok(TypeInfo::Error);
+                    }
+                    let first = &identifiers[0];
+                    if let Some(var_type) = self.context.get_variable(first) {
+                        let mut current_type = var_type.clone();
+                        for field in &identifiers[1..] {
+                            match &current_type {
+                                TypeInfo::Module(module_name) => {
+                                    let full_name = format!("{}.{}", module_name, field);
+                                    if let Some(registry) = self.registry {
+                                        if registry
+                                            .all()
+                                            .iter()
+                                            .any(|f| f.name.starts_with(&format!("{}.", full_name)))
+                                        {
+                                            current_type = TypeInfo::Module(full_name);
+                                            continue;
+                                        }
+                                    }
+                                }
+                                TypeInfo::Struct { fields, .. } => {
+                                    if let Some(field_type) = fields.get(field) {
+                                        current_type = field_type.clone();
+                                    } else {
+                                        self.errors.push(
+                                            TypeError::new(format!(
+                                                "struct has no field '{}'",
+                                                field
+                                            ))
+                                            .with_span(*expr.span()),
+                                        );
+                                        return Ok(TypeInfo::Error);
+                                    }
+                                }
+                                _ => {
+                                    return Ok(TypeInfo::Error);
+                                }
+                            }
+                        }
+                        Ok(current_type)
                     } else {
-                        if self.registry.is_some_and(|r| r.has_module(name)) {
+                        if self.registry.is_some_and(|r| r.has_module(first)) {
                             self.errors.push(
-                                TypeError::new(format!("module `{}` is not imported", name))
-                                    .with_hint(format!("add `use {}` at the top of the file", name))
+                                TypeError::new(format!("module `{}` is not imported", first))
+                                    .with_hint(format!(
+                                        "add `use {}` at the top of the file",
+                                        first
+                                    ))
                                     .with_span(*span),
                             );
                             return Ok(TypeInfo::Error);
                         }
 
-                        let mut error = TypeError::new(format!("undefined variable: {}", name))
+                        let mut error = TypeError::new(format!("undefined variable: {}", first))
                             .with_help("Variables must be declared before use".to_string())
                             .with_span(*span);
 
                         // Try to find a suggestion
                         let candidates = self.context.variables.keys().cloned();
                         if let Some(closest) =
-                            otterc_utils::suggest::find_best_match(name, candidates)
+                            otterc_utils::suggest::find_best_match(first, candidates)
                         {
                             error = error
                                 .with_hint(format!("did you mean `{}`?", closest))
@@ -1764,7 +1815,7 @@ impl TypeChecker {
                         } else {
                             error = error.with_hint(format!(
                                 "did you mean to declare it with `let {}`?",
-                                name
+                                first
                             ));
                         }
 

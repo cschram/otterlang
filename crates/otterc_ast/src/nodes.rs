@@ -223,9 +223,11 @@ pub enum Statement {
         ty: Option<Node<Type>>,
         public: bool,
     },
+    // Variable and member assignment
+    // TODO: This should be an expression to allow for chained assignments, e.g. `foo = bar = 42`
     Assignment {
-        name: Node<String>,
-        expr: Node<Expr>,
+        lhs: Node<Expr>, // Must be `Expr::Access`
+        rhs: Node<Expr>,
     },
 
     // Control flow
@@ -362,12 +364,8 @@ pub enum Expr {
     // Literals
     Literal(Node<Literal>),
 
-    // Variables and access
-    Identifier(String),
-    Member {
-        object: Box<Node<Expr>>,
-        field: String,
-    },
+    // Variable and field access, contains a list of identifiers for chained access
+    Access(Vec<String>),
 
     // Function calls
     Call {
