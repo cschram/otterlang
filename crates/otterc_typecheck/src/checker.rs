@@ -2,11 +2,12 @@ use anyhow::{Result, bail};
 use std::collections::HashMap;
 
 use crate::types::{
-    EnumDefinition, EnumLayout, StructDefinition, TypeContext, TypeError, TypeInfo,
+    EnumDefinition, EnumLayout, StructDefinition, TraitDefinition, TraitMethodDefinition,
+    TypeContext, TypeError, TypeInfo,
 };
 use otterc_ast::nodes::{
-    BinaryOp, Block, Expr, FStringPart, Function, Literal, Node, Pattern, Program, Statement, Type,
-    UnaryOp, UseImport,
+    BinaryOp, Block, Expr, FStringPart, Function, Literal, Node, Pattern, Program, Statement,
+    TraitMethod, Type, UnaryOp, UseImport,
 };
 use otterc_config::LanguageFeatureFlags;
 use otterc_span::Span;
@@ -261,7 +262,7 @@ impl TypeChecker {
                     self.check_statement(statement)?;
                 }
                 Statement::Impl { .. } => {
-                    todo!()
+                    self.check_impl(statement)?;
                 }
                 Statement::Struct { .. }
                 | Statement::Enum { .. }
@@ -310,7 +311,6 @@ impl TypeChecker {
         Ok(())
     }
 
-    #[expect(dead_code, reason = "trait metadata tracking only used by traits feature")]
     fn record_method_metadata(&mut self, method_name: &str, body: &Block) {
         let mut spans = Vec::new();
         let mut expr_ids = Vec::new();
@@ -329,7 +329,6 @@ impl TypeChecker {
         }
     }
 
-    #[expect(dead_code, reason = "trait metadata tracking only used by traits feature")]
     fn collect_metadata_in_block(
         &self,
         block: &Block,
@@ -341,7 +340,6 @@ impl TypeChecker {
         }
     }
 
-    #[expect(dead_code, reason = "trait metadata tracking only used by traits feature")]
     fn collect_metadata_in_statement(
         &self,
         stmt: &Statement,
@@ -388,7 +386,10 @@ impl TypeChecker {
         }
     }
 
-    #[expect(dead_code, reason = "trait metadata tracking only used by traits feature")]
+    #[expect(
+        dead_code,
+        reason = "trait metadata tracking only used by traits feature"
+    )]
     fn collect_metadata_in_expr(
         &self,
         expr: &Node<Expr>,
@@ -791,11 +792,86 @@ impl TypeChecker {
                     };
                     self.context.define_enum(definition);
                 }
-                Statement::Trait { .. } => {
-                    todo!()
+                Statement::Trait {
+                    name,
+                    methods,
+                    generics,
+                    public,
+                } => {
+                    let trait_methods = methods
+                        .iter()
+                        .map(|method| match method {
+                            TraitMethod::DefaultImplementation(func) => TraitMethodDefinition {
+                                name: func.as_ref().signature.as_ref().name.clone(),
+                                signature: self.infer_function_signature(func),
+                                must_impl: false,
+                            },
+                            TraitMethod::Signature(signature) => TraitMethodDefinition {
+                                name: signature.as_ref().name.clone(),
+                                signature: TypeInfo::from(signature), // TODO: Infer types
+                                must_impl: true,
+                            },
+                        })
+                        .collect();
+                    let definition = TraitDefinition {
+                        name: name.clone(),
+                        generics: generics.clone(),
+                        methods: trait_methods,
+                        public: *public,
+                    };
+                    self.context.define_trait(definition);
                 }
-                Statement::Impl { .. } => {
-                    todo!()
+                Statement::Impl {
+                    trait_name,
+                    trait_generics,
+                    type_name,
+                    type_generics,
+                    methods,
+                } => {
+                    // TODO: Generics
+                    if let Some(trait_name) = trait_name {
+                        // Validate that the trait exists
+                        match self.context.get_trait(trait_name) {
+                            Some(trait_def) => {
+                                // Validate that all required methods are implemented
+                                for method_def in trait_def.methods.iter() {
+                                    if method_def.must_impl {
+                                        let method_name = methods.iter().find(|m| {
+                                            m.as_ref().signature.as_ref().name == method_def.name
+                                        });
+                                        if method_name.is_none() {
+                                            self.errors.push(
+                                                TypeError::new(format!(
+                                                    "missing implementation of required method '{}' for trait '{}'",
+                                                    method_def.name,
+                                                    trait_name
+                                                ))
+                                                .with_span(*statement.span()),
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                            None => {
+                                self.errors.push(
+                                    TypeError::new(format!(
+                                        "trait '{}' not found for implementation",
+                                        trait_name
+                                    ))
+                                    .with_span(*statement.span()),
+                                );
+                            }
+                        }
+                    }
+                    // Define methods on struct
+                    for method in methods.iter() {
+                        let sig_ty = self.infer_function_signature(method);
+                        self.context.define_method(
+                            type_name,
+                            method.as_ref().signature.as_ref().name.clone(),
+                            sig_ty,
+                        );
+                    }
                 }
                 _ => {}
             }
@@ -2093,12 +2169,10 @@ impl TypeChecker {
                                     let arg_type = self.infer_expr_type(arg)?;
                                     let allows_string_coercion =
                                         self.should_auto_stringify_call(func, param_type);
-                                    let incompatible = !(
-                                        matches!(arg_type, TypeInfo::Error)
-                                            || arg_type.is_compatible_with(param_type)
-                                            || (allows_string_coercion
-                                                && matches!(param_type, TypeInfo::Str))
-                                    );
+                                    let incompatible = !(matches!(arg_type, TypeInfo::Error)
+                                        || arg_type.is_compatible_with(param_type)
+                                        || (allows_string_coercion
+                                            && matches!(param_type, TypeInfo::Str)));
                                     if incompatible {
                                         self.errors.push(
                                             TypeError::new(format!(
@@ -2968,7 +3042,11 @@ impl TypeChecker {
         stmt_span: &Span,
     ) -> Result<TypeInfo> {
         let target_span = target.span();
-        let error_span = if target_span.is_empty() { *stmt_span } else { *target_span };
+        let error_span = if target_span.is_empty() {
+            *stmt_span
+        } else {
+            *target_span
+        };
         match target.as_ref() {
             Expr::Identifier(name) => {
                 if let Some(var_type) = self.context.get_variable(name) {
@@ -2976,10 +3054,7 @@ impl TypeChecker {
                 } else {
                     self.errors.push(
                         TypeError::new(format!("undefined variable: {}", name))
-                            .with_hint(format!(
-                                "did you mean to declare it with `let {}`?",
-                                name
-                            ))
+                            .with_hint(format!("did you mean to declare it with `let {}`?", name))
                             .with_help(
                                 "Variables must be declared with `let` before they can be assigned"
                                     .to_string(),
@@ -3001,12 +3076,12 @@ impl TypeChecker {
                             Ok(field_type.clone())
                         } else {
                             self.errors.push(
-                                TypeError::new(format!(
-                                    "struct has no field '{}'",
-                                    field
-                                ))
-                                .with_hint("Check the struct definition for available fields".to_string())
-                                .with_span(error_span),
+                                TypeError::new(format!("struct has no field '{}'", field))
+                                    .with_hint(
+                                        "Check the struct definition for available fields"
+                                            .to_string(),
+                                    )
+                                    .with_span(error_span),
                             );
                             Ok(TypeInfo::Error)
                         }
@@ -3028,9 +3103,7 @@ impl TypeChecker {
                                 field,
                                 object_type.display_name()
                             ))
-                            .with_hint(
-                                "Only struct types support member assignments".to_string(),
-                            )
+                            .with_hint("Only struct types support member assignments".to_string())
                             .with_span(error_span),
                         );
                         Ok(TypeInfo::Error)
@@ -3039,8 +3112,10 @@ impl TypeChecker {
             }
             _ => {
                 self.errors.push(
-                    TypeError::new("assignment target must be an identifier or struct field".to_string())
-                        .with_span(error_span),
+                    TypeError::new(
+                        "assignment target must be an identifier or struct field".to_string(),
+                    )
+                    .with_span(error_span),
                 );
                 Ok(TypeInfo::Error)
             }
@@ -3265,15 +3340,13 @@ mod tests {
             public: true,
         };
         checker.context.define_struct(struct_def);
-        checker
-            .context
-            .insert_variable(
-                "point".to_string(),
-                TypeInfo::Struct {
-                    name: "Point".to_string(),
-                    fields: fields.clone(),
-                },
-            );
+        checker.context.insert_variable(
+            "point".to_string(),
+            TypeInfo::Struct {
+                name: "Point".to_string(),
+                fields: fields.clone(),
+            },
+        );
 
         let target = Node::new(
             Expr::Member {
@@ -3292,10 +3365,7 @@ mod tests {
             )),
             Span::new(0, 0),
         );
-        let stmt = Node::new(
-            Statement::Assignment { target, expr },
-            Span::new(0, 0),
-        );
+        let stmt = Node::new(Statement::Assignment { target, expr }, Span::new(0, 0));
 
         checker.check_statement(&stmt).unwrap();
         assert!(checker.errors.is_empty());
@@ -3309,7 +3379,10 @@ mod tests {
             Expr::Call {
                 func: Box::new(Node::new(Expr::Identifier("println".to_string()), span)),
                 args: vec![Node::new(
-                    Expr::Literal(Node::new(Literal::Number(NumberLiteral::new(1.0, false)), span)),
+                    Expr::Literal(Node::new(
+                        Literal::Number(NumberLiteral::new(1.0, false)),
+                        span,
+                    )),
                     span,
                 )],
             },

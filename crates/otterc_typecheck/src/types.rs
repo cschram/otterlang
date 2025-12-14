@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use otterc_ast::nodes::{EnumVariant, Node, Type};
+use otterc_ast::nodes::{EnumVariant, FunctionSignature, Node, Type};
 use otterc_span::Span;
 
 use otterc_config::LanguageFeatureFlags;
@@ -420,7 +420,33 @@ impl From<&Type> for TypeInfo {
 
 impl From<&Node<Type>> for TypeInfo {
     fn from(node: &Node<Type>) -> Self {
-        TypeInfo::from(node.as_ref())
+        Self::from(node.as_ref())
+    }
+}
+
+impl From<&FunctionSignature> for TypeInfo {
+    fn from(node: &FunctionSignature) -> Self {
+        Self::Function {
+            params: node
+                .params
+                .iter()
+                .map(|p| match &p.as_ref().ty {
+                    Some(ty) => TypeInfo::from(ty),
+                    None => TypeInfo::Unknown,
+                })
+                .collect(),
+            param_defaults: vec![],
+            return_type: match &node.ret_ty {
+                Some(ty) => Box::new(TypeInfo::from(ty)),
+                None => Box::new(TypeInfo::Unknown),
+            },
+        }
+    }
+}
+
+impl From<&Node<FunctionSignature>> for TypeInfo {
+    fn from(node: &Node<FunctionSignature>) -> Self {
+        Self::from(node.as_ref())
     }
 }
 
@@ -523,6 +549,8 @@ pub struct TypeContext {
     pub type_aliases: HashMap<String, TypeInfo>,
     /// Enum definitions available in the current module
     pub enums: HashMap<String, EnumDefinition>,
+    /// Trait definitions available in the current module
+    pub traits: HashMap<String, TraitDefinition>,
     /// Active language feature flags
     pub features: LanguageFeatureFlags,
 }
@@ -540,6 +568,7 @@ impl TypeContext {
             structs: HashMap::new(),
             type_aliases: HashMap::new(),
             enums: HashMap::new(),
+            traits: HashMap::new(),
             features,
         }
     }
@@ -589,6 +618,12 @@ impl TypeContext {
         self.structs.get(name)
     }
 
+    pub fn define_method(&mut self, struct_name: &str, method_name: String, signature: TypeInfo) {
+        if let Some(struct_def) = self.structs.get_mut(struct_name) {
+            struct_def.fields.insert(method_name, signature);
+        }
+    }
+
     pub fn define_type_alias(&mut self, name: String, ty: TypeInfo, is_public: bool) {
         let stored_type = if self.features.newtype_aliases {
             TypeInfo::Alias {
@@ -608,6 +643,14 @@ impl TypeContext {
 
     pub fn define_enum(&mut self, definition: EnumDefinition) {
         self.enums.insert(definition.name.clone(), definition);
+    }
+
+    pub fn define_trait(&mut self, definition: TraitDefinition) {
+        self.traits.insert(definition.name.clone(), definition);
+    }
+
+    pub fn get_trait(&self, name: &str) -> Option<&TraitDefinition> {
+        self.traits.get(name)
     }
 
     pub fn get_enum(&self, name: &str) -> Option<&EnumDefinition> {
@@ -803,4 +846,19 @@ impl EnumLayout {
 
         Some(fields.iter().map(|ty| ty.substitute(&subs)).collect())
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct TraitDefinition {
+    pub name: String,
+    pub generics: Vec<String>,
+    pub methods: Vec<TraitMethodDefinition>,
+    pub public: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct TraitMethodDefinition {
+    pub name: String,
+    pub signature: TypeInfo,
+    pub must_impl: bool,
 }

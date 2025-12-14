@@ -298,13 +298,13 @@ pub enum Statement {
         name: String,
         methods: Vec<TraitMethod>,
         public: bool,
-        generics: Option<Vec<String>>,
+        generics: Vec<String>,
     },
     Impl {
         trait_name: Option<String>,
-        trait_generics: Option<Vec<String>>,
+        trait_generics: Vec<String>,
         type_name: String,
-        type_generics: Option<Vec<String>>,
+        type_generics: Vec<String>,
         methods: Vec<Node<Function>>,
     },
 

@@ -1,0 +1,16 @@
+trait Greeter:
+    fn greet(self) -> str
+
+    fn print_greeting(self):
+        println(self.greet())
+
+struct Person:
+    name: str
+
+impl Greeter for Person:
+    fn greet(self) -> str:
+        return "Hello, my name is " + self.name + "!"
+
+fn main():
+    let alice = Person(name = "Alice")
+    alice.print_greeting()  # Output: Hello, my name is Alice!

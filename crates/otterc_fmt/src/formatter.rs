@@ -209,10 +209,10 @@ impl Formatter {
                 generics,
             } => {
                 let pub_str = if *public { "pub " } else { "" };
-                let gen_str = if let Some(generics) = generics {
-                    format!("<{}>", generics.join(", "))
-                } else {
+                let gen_str = if generics.is_empty() {
                     String::new()
+                } else {
+                    format!("<{}>", generics.join(", "))
                 };
                 let mut result = format!(
                     "{}{}trait {}{}:\n",
@@ -265,15 +265,15 @@ impl Formatter {
                 methods,
             } => match trait_name {
                 Some(trait_name) => {
-                    let gen_str = if let Some(trait_generics) = trait_generics {
+                    let gen_str = if trait_generics.is_empty() {
+                        String::new()
+                    } else {
                         format!("<{}>", trait_generics.join(", "))
-                    } else {
-                        String::new()
                     };
-                    let type_gen_str = if let Some(type_generics) = type_generics {
-                        format!("<{}>", type_generics.join(", "))
-                    } else {
+                    let type_gen_str = if type_generics.is_empty() {
                         String::new()
+                    } else {
+                        format!("<{}>", type_generics.join(", "))
                     };
                     let mut result = format!(
                         "{}impl {}{} for {}{}:\n",
@@ -289,17 +289,13 @@ impl Formatter {
                     result
                 }
                 None => {
-                    let gen_str = if let Some(type_generics) = type_generics {
-                        format!("<{}>", type_generics.join(", "))
-                    } else {
+                    let gen_str = if type_generics.is_empty() {
                         String::new()
+                    } else {
+                        format!("<{}>", type_generics.join(", "))
                     };
-                    let mut result = format!(
-                        "{}impl {}{}:\n",
-                        self.indent(indent),
-                        type_name,
-                        gen_str
-                    );
+                    let mut result =
+                        format!("{}impl {}{}:\n", self.indent(indent), type_name, gen_str);
                     for method in methods {
                         result.push_str(&self.format_function(method, indent + 1));
                     }

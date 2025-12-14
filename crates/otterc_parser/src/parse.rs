@@ -1397,7 +1397,7 @@ fn trait_parser() -> impl Parser<TokenKind, Node<Statement>, Error = Simple<Toke
                 Statement::Trait {
                     name,
                     methods,
-                    generics,
+                    generics: generics.unwrap_or_default(),
                     public: pub_kw.is_some(),
                 },
                 span,
@@ -1411,11 +1411,21 @@ fn impl_parser() -> impl Parser<TokenKind, Node<Statement>, Error = Simple<Token
 
     let ty = identifier_parser().then(generics_parser().or_not()).boxed();
 
-    let method = function_signature_parser()
+    let method = just(TokenKind::Pub)
+        .or_not()
+        .then(function_signature_parser())
         .then_ignore(just(TokenKind::Colon))
         .then_ignore(newline.clone())
         .then(block_parser())
-        .map_with_span(|(signature, body), span| Node::new(Function::new(signature, body), span))
+        .map_with_span(|((pub_kw, signature), body), span| {
+            Node::new(
+                match pub_kw {
+                    Some(_) => Function::new_public(signature, body),
+                    None => Function::new(signature, body),
+                },
+                span,
+            )
+        })
         .boxed();
 
     just(TokenKind::Impl)
@@ -1433,9 +1443,9 @@ fn impl_parser() -> impl Parser<TokenKind, Node<Statement>, Error = Simple<Token
             Some(right) => Node::new(
                 Statement::Impl {
                     trait_name: Some(left.0),
-                    trait_generics: left.1,
+                    trait_generics: left.1.unwrap_or_default(),
                     type_name: right.0,
-                    type_generics: right.1,
+                    type_generics: right.1.unwrap_or_default(),
                     methods,
                 },
                 span,
@@ -1443,9 +1453,9 @@ fn impl_parser() -> impl Parser<TokenKind, Node<Statement>, Error = Simple<Token
             None => Node::new(
                 Statement::Impl {
                     trait_name: None,
-                    trait_generics: None,
+                    trait_generics: Vec::new(),
                     type_name: left.0,
-                    type_generics: left.1,
+                    type_generics: left.1.unwrap_or_default(),
                     methods,
                 },
                 span,
@@ -1587,14 +1597,12 @@ mod tests {
                                             ),
                                         }
                                     }
-                                    other => panic!(
-                                        "expected call before bar member, got {:?}",
-                                        other
-                                    ),
+                                    other => {
+                                        panic!("expected call before bar member, got {:?}", other)
+                                    }
                                 }
                             }
-                            other =>
-                                panic!("expected member call for bar, got {:?}", other),
+                            other => panic!("expected member call for bar, got {:?}", other),
                         }
                     }
                     other => panic!("expected call feeding baz, got {:?}", other),
