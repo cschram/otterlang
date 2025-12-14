@@ -1,6 +1,6 @@
 use otterc_ast::nodes::{
-    BinaryOp, Block, Expr, FStringPart, Function, FunctionSignature, Literal, Node, Pattern,
-    Program, Statement, TraitMethod, Type, UnaryOp,
+    BinaryOp, Block, Expr, FStringPart, Function, Literal, Node, Pattern, Program, Statement,
+    TraitMethod, Type, UnaryOp,
 };
 
 /// Formats OtterLang code
@@ -52,14 +52,12 @@ impl Formatter {
                     self.format_expr(expr, indent)
                 )
             }
-            Statement::Assignment { name, expr, .. } => {
-                format!(
-                    "{}{} = {}\n",
-                    self.indent(indent),
-                    name,
-                    self.format_expr(expr, indent)
-                )
-            }
+            Statement::Assignment { target, expr } => format!(
+                "{}{} = {}\n",
+                self.indent(indent),
+                self.format_expr(target, indent),
+                self.format_expr(expr, indent)
+            ),
             Statement::Function(f) => self.format_function(f, indent),
             Statement::If {
                 cond,
@@ -247,7 +245,7 @@ impl Formatter {
                             result.push_str(&format!(
                                 "{}    fn {}({}){}\n",
                                 self.indent(indent),
-                                name,
+                                signature.as_ref().name,
                                 params_str,
                                 ret_str
                             ));
@@ -296,17 +294,12 @@ impl Formatter {
                     } else {
                         String::new()
                     };
-                    let mut result = if let Some(trait_name) = trait_name {
-                        format!(
-                            "{}impl {} for {}{}:\n",
-                            self.indent(indent),
-                            trait_name,
-                            type_name,
-                            gen_str
-                        )
-                    } else {
-                        format!("{}impl {}{}:\n", self.indent(indent), type_name, gen_str)
-                    };
+                    let mut result = format!(
+                        "{}impl {}{}:\n",
+                        self.indent(indent),
+                        type_name,
+                        gen_str
+                    );
                     for method in methods {
                         result.push_str(&self.format_function(method, indent + 1));
                     }
