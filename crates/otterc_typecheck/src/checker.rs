@@ -2,8 +2,7 @@ use anyhow::{Result, bail};
 use std::collections::HashMap;
 
 use crate::types::{
-    EnumDefinition, EnumLayout, StructDefinition, TraitDefinition, TraitMethodDefinition,
-    TypeContext, TypeError, TypeInfo,
+    EnumDefinition, EnumLayout, StructDefinition, TraitDefinition, TypeContext, TypeError, TypeInfo,
 };
 use otterc_ast::nodes::{
     BinaryOp, Block, Expr, FStringPart, Function, Literal, Node, Pattern, Program, Statement,
@@ -57,69 +56,6 @@ impl ModuleExports {
 }
 
 impl TypeChecker {
-    fn collect_generic_usages(&self, ty: &TypeInfo, used: &mut std::collections::HashSet<String>) {
-        match ty {
-            TypeInfo::Generic { base, args } => {
-                if args.is_empty() {
-                    // If it has no args, it might be a raw generic parameter
-                    used.insert(base.clone());
-                } else {
-                    // If it has args, the base is likely a type (List, Dict, Struct), so we check args
-                    for arg in args {
-                        self.collect_generic_usages(arg, used);
-                    }
-                }
-            }
-            TypeInfo::List(inner) => self.collect_generic_usages(inner, used),
-            TypeInfo::Dict { key, value } => {
-                self.collect_generic_usages(key, used);
-                self.collect_generic_usages(value, used);
-            }
-            TypeInfo::Function {
-                params,
-                return_type,
-                ..
-            } => {
-                for param in params {
-                    self.collect_generic_usages(param, used);
-                }
-                self.collect_generic_usages(return_type, used);
-            }
-            // Structs and Enums in TypeInfo are usually fully resolved or have their generics in args (if we added args to them)
-            // Current TypeInfo::Struct doesn't store args, which is a limitation if we want to track usage inside it.
-            // But usually `TypeInfo::Generic` covers the usage *of* a struct with generics.
-            // TypeInfo::Struct { .. } | TypeInfo::Enum { .. } => ..
-            _ => {}
-        }
-    }
-    fn is_unknown_like(ty: &TypeInfo) -> bool {
-        matches!(ty, TypeInfo::Unknown)
-            || matches!(ty, TypeInfo::Generic { args, .. } if args.is_empty())
-    }
-
-    fn merge_unknown_like_types(left: &TypeInfo, right: &TypeInfo) -> TypeInfo {
-        match (Self::is_unknown_like(left), Self::is_unknown_like(right)) {
-            (false, false) | (false, true) => left.clone(),
-            (true, false) => right.clone(),
-            (true, true) => match (left, right) {
-                (
-                    TypeInfo::Generic { base: b1, args: a1 },
-                    TypeInfo::Generic { base: b2, args: a2 },
-                ) if a1.is_empty() && a2.is_empty() && b1 == b2 => left.clone(),
-                (TypeInfo::Generic { args, .. }, _) if args.is_empty() => left.clone(),
-                (_, TypeInfo::Generic { args, .. }) if args.is_empty() => right.clone(),
-                _ => TypeInfo::Unknown,
-            },
-        }
-    }
-
-    fn record_expr_type(&mut self, expr: &Node<Expr>, ty: &TypeInfo) {
-        let id = expr.as_ref() as *const Expr as usize;
-        self.expr_types.insert(id, ty.clone());
-        self.expr_types_by_span.insert(*expr.span(), ty.clone());
-        self.expr_spans.insert(id, *expr.span());
-    }
-
     pub fn new() -> Self {
         Self::with_language_features(LanguageFeatureFlags::default())
     }
@@ -170,6 +106,162 @@ impl TypeChecker {
     pub fn with_registry(mut self, registry: &'static SymbolRegistry) -> Self {
         self.registry = Some(registry);
         self
+    }
+
+    /// Get collected errors
+    pub fn errors(&self) -> &[TypeError] {
+        &self.errors
+    }
+
+    pub fn enum_layouts(&self) -> HashMap<String, EnumLayout> {
+        self.context.enum_layouts()
+    }
+
+    pub fn into_type_maps(
+        self,
+    ) -> (
+        HashMap<usize, TypeInfo>,
+        HashMap<Span, TypeInfo>,
+        HashMap<Span, TypeInfo>,
+    ) {
+        (
+            self.expr_types,
+            self.expr_types_by_span,
+            self.comprehension_var_types,
+        )
+    }
+
+    pub fn collect_public_exports(&self, module_name: &str, program: &Program) -> ModuleExports {
+        let mut exports = ModuleExports::new(module_name.to_string());
+        for statement in &program.statements {
+            match statement.as_ref() {
+                Statement::Function(function) if function.as_ref().public => {
+                    if let Some(sig) = self
+                        .context
+                        .functions
+                        .get(&function.as_ref().signature.as_ref().name)
+                        .cloned()
+                    {
+                        exports
+                            .functions
+                            .insert(function.as_ref().signature.as_ref().name.clone(), sig);
+                    }
+                }
+                Statement::Struct { name, public, .. } if *public => {
+                    if let Some(def) = self.context.get_struct(name).cloned() {
+                        exports.structs.insert(name.clone(), def);
+                    }
+                }
+                Statement::Enum { name, public, .. } if *public => {
+                    if let Some(def) = self.context.get_enum(name).cloned() {
+                        exports.enums.insert(name.clone(), def);
+                    }
+                }
+                Statement::TypeAlias { name, public, .. } if *public => {
+                    if let Some(alias) = self.context.resolve_type_alias(name).cloned() {
+                        exports.type_aliases.insert(name.clone(), alias);
+                    }
+                }
+                Statement::Let { name, public, .. } if *public => {
+                    if let Some(var_type) = self.context.get_variable(name.as_ref()).cloned() {
+                        exports.variables.insert(name.as_ref().clone(), var_type);
+                    }
+                }
+                _ => {}
+            }
+        }
+        exports
+    }
+
+    pub fn import_module_exports(&mut self, alias: &str, exports: &ModuleExports) {
+        if exports.is_empty() {
+            return;
+        }
+
+        self.context
+            .insert_variable(alias.to_string(), TypeInfo::Module(exports.module.clone()));
+
+        for (name, ty) in &exports.functions {
+            let qualified = format!("{}.{}", exports.module, name);
+            self.context.insert_function(qualified, ty.clone());
+        }
+
+        for (name, ty) in &exports.variables {
+            let qualified = format!("{}.{}", exports.module, name);
+            self.context.insert_variable(qualified, ty.clone());
+        }
+
+        for def in exports.structs.values() {
+            self.context.define_struct(def.clone());
+        }
+
+        for def in exports.enums.values() {
+            self.context.define_enum(def.clone());
+        }
+
+        for (name, ty) in &exports.type_aliases {
+            self.context.type_aliases.insert(name.clone(), ty.clone());
+        }
+    }
+
+    pub fn register_module_definitions(&mut self, program: &Program) {
+        self.register_type_definitions(&program.statements);
+    }
+
+    /// Type check a program
+    pub fn check_program(&mut self, program: &Program) -> Result<()> {
+        self.register_module_imports(&program.statements);
+        // First pass: collect type definitions
+        self.register_type_definitions(&program.statements);
+
+        // Second pass: collect function signatures
+        for statement in &program.statements {
+            if let Statement::Function(function) = statement.as_ref() {
+                let sig = self.infer_function_signature(function);
+                self.context
+                    .functions
+                    .insert(function.as_ref().signature.as_ref().name.clone(), sig);
+            }
+        }
+
+        // Third pass: type check function bodies and top-level statements
+        for statement in &program.statements {
+            let span = statement.span();
+            match statement.as_ref() {
+                Statement::Function(function) => {
+                    self.check_function(function)?;
+                }
+                Statement::Let { .. } | Statement::Expr(_) => {
+                    // Top-level let and expressions are allowed
+                    self.check_statement(statement)?;
+                }
+                Statement::Impl { .. } => {
+                    self.check_impl(statement)?;
+                }
+                Statement::Struct { .. }
+                | Statement::Enum { .. }
+                | Statement::TypeAlias { .. }
+                | Statement::Use { .. }
+                | Statement::PubUse { .. } => {}
+                _ => {
+                    self.errors.push(
+                        TypeError::new(format!(
+                            "unexpected statement at top level: {:?}",
+                            statement
+                        ))
+                        .with_hint("Only function definitions, let statements, and expressions are allowed at the top level".to_string())
+                        .with_span(*span),
+                    );
+                }
+            }
+        }
+
+        if !self.errors.is_empty() {
+            let error_messages: Vec<String> = self.errors.iter().map(|e| e.to_string()).collect();
+            bail!("type checking failed:\n{}", error_messages.join("\n\n"));
+        }
+
+        Ok(())
     }
 
     /// Register all built-in functions in the type context
@@ -234,63 +326,192 @@ impl TypeChecker {
         );
     }
 
-    /// Type check a program
-    pub fn check_program(&mut self, program: &Program) -> Result<()> {
-        self.register_module_imports(&program.statements);
-        // First pass: collect struct definitions, enums, and type aliases
-        self.register_type_definitions(&program.statements);
-
-        // Second pass: collect function signatures
-        for statement in &program.statements {
-            if let Statement::Function(function) = statement.as_ref() {
-                let sig = self.infer_function_signature(function);
-                self.context
-                    .functions
-                    .insert(function.as_ref().signature.as_ref().name.clone(), sig);
-            }
-        }
-
-        // Third pass: type check function bodies and top-level statements
-        for statement in &program.statements {
-            let span = statement.span();
+    fn register_type_definitions(&mut self, statements: &[Node<Statement>]) {
+        for statement in statements {
             match statement.as_ref() {
-                Statement::Function(function) => {
-                    self.check_function(function)?;
+                Statement::Struct {
+                    name,
+                    fields,
+                    generics,
+                    public,
+                } => {
+                    let mut field_types = HashMap::new();
+                    for (field_name, field_ty) in fields {
+                        let ty = self.context.type_from_annotation(field_ty);
+                        field_types.insert(field_name.clone(), ty);
+                    }
+
+                    // Validate generic parameters
+                    let mut used_generics = std::collections::HashSet::new();
+                    for ty in field_types.values() {
+                        self.collect_generic_usages(ty, &mut used_generics);
+                    }
+
+                    for generic in generics {
+                        if !used_generics.contains(generic) {
+                            self.errors.push(
+                                TypeError::new(format!(
+                                    "generic parameter '{}' declared on struct '{}' is never used",
+                                    generic, name
+                                ))
+                                .with_hint(
+                                    "remove the unused generic or use it in a field type"
+                                        .to_string(),
+                                )
+                                .with_span(*statement.span()),
+                            );
+                        }
+                    }
+
+                    for used in &used_generics {
+                        if !generics.contains(used) {
+                            self.errors.push(
+                                TypeError::new(format!(
+                                    "generic parameter '{}' used in struct '{}' but not declared",
+                                    used, name
+                                ))
+                                .with_hint(format!(
+                                    "add '{}' to the struct's generic parameter list",
+                                    used
+                                ))
+                                .with_span(*statement.span()),
+                            );
+                        }
+                    }
+                    let definition = StructDefinition {
+                        name: name.clone(),
+                        generics: generics.clone(),
+                        fields: field_types,
+                        public: *public,
+                    };
+                    self.context.define_struct(definition);
                 }
-                Statement::Let { .. } | Statement::Expr(_) => {
-                    // Top-level let and expressions are allowed
-                    self.check_statement(statement)?;
+                Statement::TypeAlias {
+                    name,
+                    target,
+                    public,
+                    ..
+                } => {
+                    let ty = self.context.type_from_annotation(target);
+                    self.context.define_type_alias(name.clone(), ty, *public);
                 }
-                Statement::Impl { .. } => {
-                    self.check_impl(statement)?;
+                Statement::Enum {
+                    name,
+                    variants,
+                    generics,
+                    public,
+                } => {
+                    let definition = EnumDefinition {
+                        name: name.clone(),
+                        generics: generics.clone(),
+                        variants: variants.iter().map(|v| v.as_ref()).cloned().collect(),
+                        public: *public,
+                    };
+                    self.context.define_enum(definition);
                 }
-                Statement::Struct { .. }
-                | Statement::Enum { .. }
-                | Statement::TypeAlias { .. }
-                | Statement::Use { .. }
-                | Statement::PubUse { .. } => {}
-                _ => {
-                    self.errors.push(
-                        TypeError::new(format!(
-                            "unexpected statement at top level: {:?}",
-                            statement
-                        ))
-                        .with_hint("Only function definitions, let statements, and expressions are allowed at the top level".to_string())
-                        .with_span(*span),
-                    );
+                Statement::Trait {
+                    name,
+                    methods,
+                    generics,
+                    public,
+                } => {
+                    let mut trait_methods = HashMap::new();
+                    for method in methods.iter() {
+                        let name = match method {
+                            TraitMethod::Signature(sig) => sig.as_ref().name.clone(),
+                            TraitMethod::DefaultImplementation(func) => {
+                                func.as_ref().signature.as_ref().name.clone()
+                            }
+                        };
+                        trait_methods.insert(name, method.clone());
+                    }
+                    let definition = TraitDefinition {
+                        name: name.clone(),
+                        generics: generics.clone(),
+                        methods: trait_methods,
+                        public: *public,
+                    };
+                    self.context.define_trait(definition);
                 }
+                _ => {}
             }
         }
-
-        if !self.errors.is_empty() {
-            let error_messages: Vec<String> = self.errors.iter().map(|e| e.to_string()).collect();
-            bail!("type checking failed:\n{}", error_messages.join("\n\n"));
-        }
-
-        Ok(())
     }
 
-    #[expect(dead_code, reason = "trait method support not wired yet")]
+    fn register_module_imports(&mut self, statements: &[Node<Statement>]) {
+        for statement in statements {
+            if let Statement::Use { imports } = statement.as_ref() {
+                for import in imports {
+                    self.try_register_module(import);
+                }
+            }
+        }
+    }
+
+    fn collect_generic_usages(&self, ty: &TypeInfo, used: &mut std::collections::HashSet<String>) {
+        match ty {
+            TypeInfo::Generic { base, args } => {
+                if args.is_empty() {
+                    // If it has no args, it might be a raw generic parameter
+                    used.insert(base.clone());
+                } else {
+                    // If it has args, the base is likely a type (List, Dict, Struct), so we check args
+                    for arg in args {
+                        self.collect_generic_usages(arg, used);
+                    }
+                }
+            }
+            TypeInfo::List(inner) => self.collect_generic_usages(inner, used),
+            TypeInfo::Dict { key, value } => {
+                self.collect_generic_usages(key, used);
+                self.collect_generic_usages(value, used);
+            }
+            TypeInfo::Function {
+                params,
+                return_type,
+                ..
+            } => {
+                for param in params {
+                    self.collect_generic_usages(param, used);
+                }
+                self.collect_generic_usages(return_type, used);
+            }
+            // Structs and Enums in TypeInfo are usually fully resolved or have their generics in args (if we added args to them)
+            // Current TypeInfo::Struct doesn't store args, which is a limitation if we want to track usage inside it.
+            // But usually `TypeInfo::Generic` covers the usage *of* a struct with generics.
+            // TypeInfo::Struct { .. } | TypeInfo::Enum { .. } => ..
+            _ => {}
+        }
+    }
+
+    fn is_unknown_like(ty: &TypeInfo) -> bool {
+        matches!(ty, TypeInfo::Unknown)
+            || matches!(ty, TypeInfo::Generic { args, .. } if args.is_empty())
+    }
+
+    fn merge_unknown_like_types(left: &TypeInfo, right: &TypeInfo) -> TypeInfo {
+        match (Self::is_unknown_like(left), Self::is_unknown_like(right)) {
+            (false, false) | (false, true) => left.clone(),
+            (true, false) => right.clone(),
+            (true, true) => match (left, right) {
+                (
+                    TypeInfo::Generic { base: b1, args: a1 },
+                    TypeInfo::Generic { base: b2, args: a2 },
+                ) if a1.is_empty() && a2.is_empty() && b1 == b2 => left.clone(),
+                (TypeInfo::Generic { args, .. }, _) if args.is_empty() => left.clone(),
+                (_, TypeInfo::Generic { args, .. }) if args.is_empty() => right.clone(),
+                _ => TypeInfo::Unknown,
+            },
+        }
+    }
+
+    fn record_expr_type(&mut self, expr: &Node<Expr>, ty: &TypeInfo) {
+        let id = expr.as_ref() as *const Expr as usize;
+        self.expr_types.insert(id, ty.clone());
+        self.expr_types_by_span.insert(*expr.span(), ty.clone());
+        self.expr_spans.insert(id, *expr.span());
+    }
+
     fn check_struct_methods(
         &mut self,
         struct_name: &str,
@@ -386,10 +607,6 @@ impl TypeChecker {
         }
     }
 
-    #[expect(
-        dead_code,
-        reason = "trait metadata tracking only used by traits feature"
-    )]
     fn collect_metadata_in_expr(
         &self,
         expr: &Node<Expr>,
@@ -542,7 +759,6 @@ impl TypeChecker {
         }
     }
 
-    #[expect(dead_code, reason = "trait method lowering not wired yet")]
     fn rewrite_method_self_param(&self, method_func: &mut Function, struct_name: &str) {
         let Some(first_param) = method_func.signature.as_mut().params.first_mut() else {
             return;
@@ -645,20 +861,6 @@ impl TypeChecker {
         }
     }
 
-    pub fn register_module_definitions(&mut self, program: &Program) {
-        self.register_type_definitions(&program.statements);
-    }
-
-    fn register_module_imports(&mut self, statements: &[Node<Statement>]) {
-        for statement in statements {
-            if let Statement::Use { imports } = statement.as_ref() {
-                for import in imports {
-                    self.try_register_module(import);
-                }
-            }
-        }
-    }
-
     fn try_register_module(&mut self, import: &Node<UseImport>) {
         let Some(registry) = self.registry else {
             return;
@@ -706,175 +908,6 @@ impl TypeChecker {
             None
         } else {
             Some(canonical.to_string())
-        }
-    }
-
-    fn register_type_definitions(&mut self, statements: &[Node<Statement>]) {
-        for statement in statements {
-            match statement.as_ref() {
-                Statement::Struct {
-                    name,
-                    fields,
-                    generics,
-                    public,
-                } => {
-                    let mut field_types = HashMap::new();
-                    for (field_name, field_ty) in fields {
-                        let ty = self.context.type_from_annotation(field_ty);
-                        field_types.insert(field_name.clone(), ty);
-                    }
-
-                    // Validate generic parameters
-                    let mut used_generics = std::collections::HashSet::new();
-                    for ty in field_types.values() {
-                        self.collect_generic_usages(ty, &mut used_generics);
-                    }
-
-                    for generic in generics {
-                        if !used_generics.contains(generic) {
-                            self.errors.push(
-                                TypeError::new(format!(
-                                    "generic parameter '{}' declared on struct '{}' is never used",
-                                    generic, name
-                                ))
-                                .with_hint(
-                                    "remove the unused generic or use it in a field type"
-                                        .to_string(),
-                                )
-                                .with_span(*statement.span()),
-                            );
-                        }
-                    }
-
-                    for used in &used_generics {
-                        if !generics.contains(used) {
-                            self.errors.push(
-                                TypeError::new(format!(
-                                    "generic parameter '{}' used in struct '{}' but not declared",
-                                    used, name
-                                ))
-                                .with_hint(format!(
-                                    "add '{}' to the struct's generic parameter list",
-                                    used
-                                ))
-                                .with_span(*statement.span()),
-                            );
-                        }
-                    }
-                    let definition = StructDefinition {
-                        name: name.clone(),
-                        generics: generics.clone(),
-                        fields: field_types,
-                        public: *public,
-                    };
-                    self.context.define_struct(definition);
-                }
-                Statement::TypeAlias {
-                    name,
-                    target,
-                    public,
-                    ..
-                } => {
-                    let ty = self.context.type_from_annotation(target);
-                    self.context.define_type_alias(name.clone(), ty, *public);
-                }
-                Statement::Enum {
-                    name,
-                    variants,
-                    generics,
-                    public,
-                } => {
-                    let definition = EnumDefinition {
-                        name: name.clone(),
-                        generics: generics.clone(),
-                        variants: variants.iter().map(|v| v.as_ref()).cloned().collect(),
-                        public: *public,
-                    };
-                    self.context.define_enum(definition);
-                }
-                Statement::Trait {
-                    name,
-                    methods,
-                    generics,
-                    public,
-                } => {
-                    let trait_methods = methods
-                        .iter()
-                        .map(|method| match method {
-                            TraitMethod::DefaultImplementation(func) => TraitMethodDefinition {
-                                name: func.as_ref().signature.as_ref().name.clone(),
-                                signature: self.infer_function_signature(func),
-                                must_impl: false,
-                            },
-                            TraitMethod::Signature(signature) => TraitMethodDefinition {
-                                name: signature.as_ref().name.clone(),
-                                signature: TypeInfo::from(signature), // TODO: Infer types
-                                must_impl: true,
-                            },
-                        })
-                        .collect();
-                    let definition = TraitDefinition {
-                        name: name.clone(),
-                        generics: generics.clone(),
-                        methods: trait_methods,
-                        public: *public,
-                    };
-                    self.context.define_trait(definition);
-                }
-                Statement::Impl {
-                    trait_name,
-                    trait_generics,
-                    type_name,
-                    type_generics,
-                    methods,
-                } => {
-                    // TODO: Generics
-                    if let Some(trait_name) = trait_name {
-                        // Validate that the trait exists
-                        match self.context.get_trait(trait_name) {
-                            Some(trait_def) => {
-                                // Validate that all required methods are implemented
-                                for method_def in trait_def.methods.iter() {
-                                    if method_def.must_impl {
-                                        let method_name = methods.iter().find(|m| {
-                                            m.as_ref().signature.as_ref().name == method_def.name
-                                        });
-                                        if method_name.is_none() {
-                                            self.errors.push(
-                                                TypeError::new(format!(
-                                                    "missing implementation of required method '{}' for trait '{}'",
-                                                    method_def.name,
-                                                    trait_name
-                                                ))
-                                                .with_span(*statement.span()),
-                                            );
-                                        }
-                                    }
-                                }
-                            }
-                            None => {
-                                self.errors.push(
-                                    TypeError::new(format!(
-                                        "trait '{}' not found for implementation",
-                                        trait_name
-                                    ))
-                                    .with_span(*statement.span()),
-                                );
-                            }
-                        }
-                    }
-                    // Define methods on struct
-                    for method in methods.iter() {
-                        let sig_ty = self.infer_function_signature(method);
-                        self.context.define_method(
-                            type_name,
-                            method.as_ref().signature.as_ref().name.clone(),
-                            sig_ty,
-                        );
-                    }
-                }
-                _ => {}
-            }
         }
     }
 
@@ -1788,7 +1821,7 @@ impl TypeChecker {
     }
 
     /// Infer the type of an expression
-    pub fn infer_expr_type(&mut self, expr: &Node<Expr>) -> Result<TypeInfo> {
+    fn infer_expr_type(&mut self, expr: &Node<Expr>) -> Result<TypeInfo> {
         let span = expr.span();
         let ty = (|| -> Result<TypeInfo> {
             match expr.as_ref() {
@@ -2912,104 +2945,8 @@ impl TypeChecker {
         Ok(ty)
     }
 
-    /// Get collected errors
-    pub fn errors(&self) -> &[TypeError] {
-        &self.errors
-    }
-
-    pub fn expr_type_map(&self) -> &HashMap<usize, TypeInfo> {
+    fn expr_type_map(&self) -> &HashMap<usize, TypeInfo> {
         &self.expr_types
-    }
-
-    pub fn into_type_maps(
-        self,
-    ) -> (
-        HashMap<usize, TypeInfo>,
-        HashMap<Span, TypeInfo>,
-        HashMap<Span, TypeInfo>,
-    ) {
-        (
-            self.expr_types,
-            self.expr_types_by_span,
-            self.comprehension_var_types,
-        )
-    }
-
-    pub fn enum_layouts(&self) -> HashMap<String, EnumLayout> {
-        self.context.enum_layouts()
-    }
-
-    pub fn collect_public_exports(&self, module_name: &str, program: &Program) -> ModuleExports {
-        let mut exports = ModuleExports::new(module_name.to_string());
-        for statement in &program.statements {
-            match statement.as_ref() {
-                Statement::Function(function) if function.as_ref().public => {
-                    if let Some(sig) = self
-                        .context
-                        .functions
-                        .get(&function.as_ref().signature.as_ref().name)
-                        .cloned()
-                    {
-                        exports
-                            .functions
-                            .insert(function.as_ref().signature.as_ref().name.clone(), sig);
-                    }
-                }
-                Statement::Struct { name, public, .. } if *public => {
-                    if let Some(def) = self.context.get_struct(name).cloned() {
-                        exports.structs.insert(name.clone(), def);
-                    }
-                }
-                Statement::Enum { name, public, .. } if *public => {
-                    if let Some(def) = self.context.get_enum(name).cloned() {
-                        exports.enums.insert(name.clone(), def);
-                    }
-                }
-                Statement::TypeAlias { name, public, .. } if *public => {
-                    if let Some(alias) = self.context.resolve_type_alias(name).cloned() {
-                        exports.type_aliases.insert(name.clone(), alias);
-                    }
-                }
-                Statement::Let { name, public, .. } if *public => {
-                    if let Some(var_type) = self.context.get_variable(name.as_ref()).cloned() {
-                        exports.variables.insert(name.as_ref().clone(), var_type);
-                    }
-                }
-                _ => {}
-            }
-        }
-        exports
-    }
-
-    pub fn import_module_exports(&mut self, alias: &str, exports: &ModuleExports) {
-        if exports.is_empty() {
-            return;
-        }
-
-        self.context
-            .insert_variable(alias.to_string(), TypeInfo::Module(exports.module.clone()));
-
-        for (name, ty) in &exports.functions {
-            let qualified = format!("{}.{}", exports.module, name);
-            self.context.insert_function(qualified, ty.clone());
-        }
-
-        for (name, ty) in &exports.variables {
-            let qualified = format!("{}.{}", exports.module, name);
-            self.context.insert_variable(qualified, ty.clone());
-        }
-
-        for def in exports.structs.values() {
-            self.context.define_struct(def.clone());
-        }
-
-        for def in exports.enums.values() {
-            self.context.define_enum(def.clone());
-        }
-
-        for (name, ty) in &exports.type_aliases {
-            self.context.type_aliases.insert(name.clone(), ty.clone());
-        }
     }
 
     fn build_member_path(&self, object: &Node<Expr>, field: &str) -> String {

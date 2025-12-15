@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use otterc_ast::nodes::{EnumVariant, FunctionSignature, Node, Type};
+use otterc_ast::nodes::{EnumVariant, FunctionSignature, Node, TraitMethod, Type};
 use otterc_span::Span;
 
 use otterc_config::LanguageFeatureFlags;
@@ -424,32 +424,6 @@ impl From<&Node<Type>> for TypeInfo {
     }
 }
 
-impl From<&FunctionSignature> for TypeInfo {
-    fn from(node: &FunctionSignature) -> Self {
-        Self::Function {
-            params: node
-                .params
-                .iter()
-                .map(|p| match &p.as_ref().ty {
-                    Some(ty) => TypeInfo::from(ty),
-                    None => TypeInfo::Unknown,
-                })
-                .collect(),
-            param_defaults: vec![],
-            return_type: match &node.ret_ty {
-                Some(ty) => Box::new(TypeInfo::from(ty)),
-                None => Box::new(TypeInfo::Unknown),
-            },
-        }
-    }
-}
-
-impl From<&Node<FunctionSignature>> for TypeInfo {
-    fn from(node: &Node<FunctionSignature>) -> Self {
-        Self::from(node.as_ref())
-    }
-}
-
 impl From<&str> for TypeInfo {
     fn from(name: &str) -> Self {
         match name {
@@ -852,13 +826,6 @@ impl EnumLayout {
 pub struct TraitDefinition {
     pub name: String,
     pub generics: Vec<String>,
-    pub methods: Vec<TraitMethodDefinition>,
+    pub methods: HashMap<String, TraitMethod>,
     pub public: bool,
-}
-
-#[derive(Debug, Clone)]
-pub struct TraitMethodDefinition {
-    pub name: String,
-    pub signature: TypeInfo,
-    pub must_impl: bool,
 }
