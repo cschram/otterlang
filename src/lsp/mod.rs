@@ -6,7 +6,7 @@ use tower_lsp::jsonrpc::Result;
 use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer, LspService, Server};
 
-use otterc_ast::nodes::{Expr, Function, Node, Program, Statement, Type};
+use otterc_ast::nodes::{Expr, Function, Node, Program, Stmt, Type};
 use otterc_lexer::{LexerError, Token, tokenize};
 use otterc_parser::parse;
 use otterc_span::Span;
@@ -970,7 +970,7 @@ fn build_symbol_table(program: &Program, tokens: &[Token], text: &str) -> Symbol
 
 /// Recursively extract symbol definitions from statements
 fn build_symbol_table_from_statements(
-    statements: &[Node<Statement>],
+    statements: &[Node<Stmt>],
     table: &mut SymbolTable,
     tokens: &[Token],
     text: &str,
@@ -978,7 +978,7 @@ fn build_symbol_table_from_statements(
     for stmt in statements {
         let span = stmt.span();
         match stmt.as_ref() {
-            Statement::Let { name, ty, expr, .. } => {
+            Stmt::Let { name, ty, expr, .. } => {
                 let ty_str = ty
                     .as_ref()
                     .map(|ty| format_type(ty.as_ref()))
@@ -986,7 +986,7 @@ fn build_symbol_table_from_statements(
                 table.add_variable(name.as_ref().clone(), *span, ty_str);
             }
 
-            Statement::Function(func) => {
+            Stmt::Function(func) => {
                 // Find function name span from tokens
                 if let Some(span) = find_name_span(&func.as_ref().name, tokens, text) {
                     let sig = format_function_signature(func.as_ref());
@@ -1008,7 +1008,7 @@ fn build_symbol_table_from_statements(
                     text,
                 );
             }
-            Statement::Struct { name, methods, .. } => {
+            Stmt::Struct { name, methods, .. } => {
                 if let Some(span) = find_name_span(name, tokens, text) {
                     table.add_struct(name.clone(), span);
                 }
@@ -1020,17 +1020,17 @@ fn build_symbol_table_from_statements(
                     }
                 }
             }
-            Statement::Enum { name, .. } => {
+            Stmt::Enum { name, .. } => {
                 if let Some(span) = find_name_span(name, tokens, text) {
                     table.add_enum(name.clone(), span);
                 }
             }
-            Statement::TypeAlias { name, .. } => {
+            Stmt::TypeAlias { name, .. } => {
                 if let Some(span) = find_name_span(name, tokens, text) {
                     table.add_type_alias(name.clone(), span);
                 }
             }
-            Statement::If {
+            Stmt::If {
                 then_block,
                 elif_blocks,
                 else_block,
@@ -1059,14 +1059,14 @@ fn build_symbol_table_from_statements(
                     );
                 }
             }
-            Statement::For { var, body, .. } => {
+            Stmt::For { var, body, .. } => {
                 table.add_variable(var.as_ref().clone(), *span, None);
                 build_symbol_table_from_statements(&body.as_ref().statements, table, tokens, text);
             }
-            Statement::While { body, .. } => {
+            Stmt::While { body, .. } => {
                 build_symbol_table_from_statements(&body.as_ref().statements, table, tokens, text);
             }
-            Statement::Block(block) => {
+            Stmt::Block(block) => {
                 build_symbol_table_from_statements(&block.as_ref().statements, table, tokens, text);
             }
             _ => {}
@@ -1076,7 +1076,7 @@ fn build_symbol_table_from_statements(
 
 /// Collect references to symbols from expressions
 fn collect_references_from_statements(
-    statements: &[Node<Statement>],
+    statements: &[Node<Stmt>],
     table: &mut SymbolTable,
     tokens: &[Token],
     text: &str,
@@ -1084,7 +1084,7 @@ fn collect_references_from_statements(
     for stmt in statements {
         let span = stmt.span();
         match stmt.as_ref() {
-            Statement::Function(func) => {
+            Stmt::Function(func) => {
                 collect_references_from_expr(
                     &Expr::Call {
                         func: Box::new(Node::new(
@@ -1104,10 +1104,10 @@ fn collect_references_from_statements(
                     text,
                 );
             }
-            Statement::Let { expr, .. } | Statement::Expr(expr) | Statement::Return(Some(expr)) => {
+            Stmt::Let { expr, .. } | Stmt::Expr(expr) | Stmt::Return(Some(expr)) => {
                 collect_references_from_expr(expr.as_ref(), table, tokens, text);
             }
-            Statement::If {
+            Stmt::If {
                 cond,
                 then_block,
                 elif_blocks,
@@ -1139,11 +1139,11 @@ fn collect_references_from_statements(
                     );
                 }
             }
-            Statement::For { iterable, body, .. } => {
+            Stmt::For { iterable, body, .. } => {
                 collect_references_from_expr(iterable.as_ref(), table, tokens, text);
                 collect_references_from_statements(&body.as_ref().statements, table, tokens, text);
             }
-            Statement::While { cond, body } => {
+            Stmt::While { cond, body } => {
                 collect_references_from_expr(cond.as_ref(), table, tokens, text);
                 collect_references_from_statements(&body.as_ref().statements, table, tokens, text);
             }

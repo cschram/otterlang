@@ -5,7 +5,9 @@ edition = "2024"
 
 [dependencies]
 otterc_cache.path = "../otterc_cache"
+otterc_ident.path = "../otterc_ident"
 otterc_symbol.path = "../otterc_symbol"
+otterc_ty.path = "../otterc_ty"
 
 serde.workspace = true
 abi_stable.workspace = true

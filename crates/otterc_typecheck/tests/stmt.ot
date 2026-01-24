@@ -1,0 +1,14 @@
+fn main():
+    let foo: i64 = "hello"
+    if foo:
+        print("test")
+    for i in 42:
+        print(i)
+    while 42:
+        print("loop")
+
+fn foo() -> i64:
+    return "not an i64"
+
+fn bar() -> i64:
+    print("Hello, World!")

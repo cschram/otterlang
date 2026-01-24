@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use super::call_graph::CallGraph;
 use super::inliner::{InlineConfig, Inliner};
 use otterc_ast::nodes::{
-    BinaryOp, Block, Expr, FStringPart, Function, Literal, Node, NumberLiteral, Program, Statement,
+    BinaryOp, Block, Expr, FStringPart, Function, Literal, Node, NumberLiteral, Program, Stmt,
     UnaryOp,
 };
 use otterc_config::CodegenOptLevel;
@@ -79,7 +79,7 @@ impl Reoptimizer {
         let (mut optimized, _) = self.inliner.inline_program(program, &hot_set, call_graph);
 
         for stmt in &mut optimized.statements {
-            if let Statement::Function(func) = stmt.as_mut() {
+            if let Stmt::Function(func) = stmt.as_mut() {
                 if hot_set.contains(&func.as_ref().name) {
                     *func = func.clone().map(|func| self.post_inline_optimize(&func));
                 } else {
@@ -120,15 +120,15 @@ impl Reoptimizer {
         block.statements = rewritten;
     }
 
-    fn fold_constants_in_statement(&self, stmt: &mut Statement) {
+    fn fold_constants_in_statement(&self, stmt: &mut Stmt) {
         match stmt {
-            Statement::Let { expr, .. }
-            | Statement::Assignment { expr, .. }
-            | Statement::Expr(expr)
-            | Statement::Return(Some(expr)) => {
+            Stmt::Let { expr, .. }
+            | Stmt::Assignment { expr, .. }
+            | Stmt::Expr(expr)
+            | Stmt::Return(Some(expr)) => {
                 self.fold_constants_in_expr(expr.as_mut());
             }
-            Statement::If {
+            Stmt::If {
                 cond,
                 then_block,
                 elif_blocks,
@@ -143,15 +143,15 @@ impl Reoptimizer {
                     self.fold_constants_in_block(block.as_mut());
                 }
             }
-            Statement::While { cond, body } => {
+            Stmt::While { cond, body } => {
                 self.fold_constants_in_expr(cond.as_mut());
                 self.fold_constants_in_block(body.as_mut());
             }
-            Statement::For { iterable, body, .. } => {
+            Stmt::For { iterable, body, .. } => {
                 self.fold_constants_in_expr(iterable.as_mut());
                 self.fold_constants_in_block(body.as_mut());
             }
-            Statement::Block(inner) => self.fold_constants_in_block(inner.as_mut()),
+            Stmt::Block(inner) => self.fold_constants_in_block(inner.as_mut()),
             // Exception handling (try/except/finally/raise) removed
             _ => {}
         }
@@ -368,10 +368,10 @@ impl Reoptimizer {
         }
     }
 
-    fn simplify_statement(&self, stmt: Statement) -> StatementTransform {
+    fn simplify_statement(&self, stmt: Stmt) -> StatementTransform {
         match stmt {
-            Statement::Pass => StatementTransform::None,
-            Statement::If {
+            Stmt::Pass => StatementTransform::None,
+            Stmt::If {
                 cond,
                 then_block,
                 elif_blocks,
@@ -410,7 +410,7 @@ impl Reoptimizer {
                 {
                     StatementTransform::None
                 } else {
-                    StatementTransform::Single(Box::new(Statement::If {
+                    StatementTransform::Single(Box::new(Stmt::If {
                         cond,
                         then_block,
                         elif_blocks,
@@ -418,9 +418,7 @@ impl Reoptimizer {
                     }))
                 }
             }
-            Statement::Block(block) if block.as_ref().statements.is_empty() => {
-                StatementTransform::None
-            }
+            Stmt::Block(block) if block.as_ref().statements.is_empty() => StatementTransform::None,
             other => StatementTransform::Single(Box::new(other)),
         }
     }
@@ -435,7 +433,7 @@ impl Reoptimizer {
             }
             terminated = matches!(
                 stmt.as_ref(),
-                Statement::Return(_) | Statement::Break | Statement::Continue
+                Stmt::Return(_) | Stmt::Break | Stmt::Continue
             );
             pruned.push(stmt);
         }
@@ -444,7 +442,7 @@ impl Reoptimizer {
 
         for stmt in &mut block.statements {
             match stmt.as_mut() {
-                Statement::If {
+                Stmt::If {
                     then_block,
                     elif_blocks,
                     else_block,
@@ -458,9 +456,9 @@ impl Reoptimizer {
                         self.remove_dead_statements(block.as_mut());
                     }
                 }
-                Statement::While { body, .. }
-                | Statement::For { body, .. }
-                | Statement::Block(body) => self.remove_dead_statements(body.as_mut()),
+                Stmt::While { body, .. } | Stmt::For { body, .. } | Stmt::Block(body) => {
+                    self.remove_dead_statements(body.as_mut())
+                }
                 // Exception handling (try/except/finally/raise) removed
                 _ => {}
             }
@@ -472,14 +470,14 @@ impl Reoptimizer {
         for mut stmt in block.statements.drain(..) {
             let span = *stmt.span();
             match stmt.as_mut() {
-                Statement::Block(inner) => {
+                Stmt::Block(inner) => {
                     self.prune_empty_blocks(inner.as_mut());
                     if inner.as_mut().statements.is_empty() {
                         continue;
                     }
-                    flattened.push(Node::new(Statement::Block(inner.clone()), span));
+                    flattened.push(Node::new(Stmt::Block(inner.clone()), span));
                 }
-                Statement::If {
+                Stmt::If {
                     then_block,
                     elif_blocks,
                     else_block,
@@ -494,7 +492,7 @@ impl Reoptimizer {
                     }
                     flattened.push(stmt);
                 }
-                Statement::While { body, .. } | Statement::For { body, .. } => {
+                Stmt::While { body, .. } | Stmt::For { body, .. } => {
                     self.prune_empty_blocks(body.as_mut());
                     flattened.push(stmt);
                 }
@@ -513,7 +511,7 @@ impl Default for Reoptimizer {
 }
 
 enum StatementTransform {
-    Single(Box<Statement>),
-    Many(Vec<Statement>),
+    Single(Box<Stmt>),
+    Many(Vec<Stmt>),
     None,
 }

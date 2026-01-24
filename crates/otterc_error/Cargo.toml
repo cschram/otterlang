@@ -1,0 +1,11 @@
+[package]
+name = "otterc_error"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+otterc_span.path = "../otterc_span"
+thiserror.workspace = true
+
+[lints]
+workspace = true

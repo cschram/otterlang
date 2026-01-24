@@ -13,7 +13,8 @@ use otterc_ast::nodes::Program;
 use otterc_span::Span;
 
 use otterc_config::{CodegenOptLevel, CodegenOptions, TargetTriple};
-use otterc_typecheck::{EnumLayout, TypeInfo};
+// use otterc_typecheck::{EnumLayout, TypeInfo};
+use otterc_ty::{TyKind, TypeRegistry};
 
 use super::bridges::prepare_rust_bridges;
 use super::compiler::Compiler;
@@ -124,7 +125,8 @@ pub fn build_executable(
     expr_types: &HashMap<usize, TypeInfo>,
     expr_types_by_span: &HashMap<Span, TypeInfo>,
     comprehension_var_types: &HashMap<Span, TypeInfo>,
-    enum_layouts: &HashMap<String, EnumLayout>,
+    // enum_layouts: &HashMap<String, EnumLayout>,
+    type_registry: TypeRegistry,
     output: &Path,
     options: &CodegenOptions,
 ) -> Result<BuildArtifact> {

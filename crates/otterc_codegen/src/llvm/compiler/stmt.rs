@@ -3,7 +3,7 @@ use inkwell::values::{BasicValueEnum, FunctionValue};
 
 use crate::llvm::compiler::Compiler;
 use crate::llvm::compiler::types::{EvaluatedValue, FunctionContext, OtterType, Variable};
-use otterc_ast::nodes::{Block, Expr, Statement};
+use otterc_ast::nodes::{Block, Expr, Stmt};
 use otterc_typecheck::TypeInfo;
 
 struct IteratorRuntime<'ctx> {
@@ -29,16 +29,16 @@ impl<'ctx> Compiler<'ctx> {
 
     pub(crate) fn lower_statement(
         &mut self,
-        stmt: &Statement,
+        stmt: &Stmt,
         function: FunctionValue<'ctx>,
         ctx: &mut FunctionContext<'ctx>,
     ) -> Result<()> {
         match stmt {
-            Statement::Expr(expr) => {
+            Stmt::Expr(expr) => {
                 self.eval_expr(expr.as_ref(), ctx)?;
                 Ok(())
             }
-            Statement::Return(expr) => {
+            Stmt::Return(expr) => {
                 if let Some(expr) = expr {
                     let val = self.eval_expr(expr.as_ref(), ctx)?;
                     if let Some(v) = val.value {
@@ -51,7 +51,7 @@ impl<'ctx> Compiler<'ctx> {
                 }
                 Ok(())
             }
-            Statement::Let {
+            Stmt::Let {
                 name,
                 ty,
                 expr,
@@ -100,7 +100,7 @@ impl<'ctx> Compiler<'ctx> {
                 // For Unit types, we don't create a variable
                 Ok(())
             }
-            Statement::Assignment { name, expr } => {
+            Stmt::Assignment { name, expr } => {
                 let val = self.eval_expr(expr.as_ref(), ctx)?;
                 let EvaluatedValue {
                     ty: val_ty,
@@ -123,7 +123,7 @@ impl<'ctx> Compiler<'ctx> {
                 }
                 Ok(())
             }
-            Statement::If {
+            Stmt::If {
                 cond,
                 then_block,
                 elif_blocks,
@@ -136,10 +136,10 @@ impl<'ctx> Compiler<'ctx> {
                 elif_blocks,
                 else_block.as_ref().map(|b| b.as_ref()),
             ),
-            Statement::While { cond, body } => {
+            Stmt::While { cond, body } => {
                 self.lower_while_loop(function, ctx, cond.as_ref(), body.as_ref())
             }
-            Statement::Break => {
+            Stmt::Break => {
                 if let Some(loop_ctx) = ctx.current_loop() {
                     self.builder.build_unconditional_branch(loop_ctx.exit_bb)?;
                 } else {
@@ -147,7 +147,7 @@ impl<'ctx> Compiler<'ctx> {
                 }
                 Ok(())
             }
-            Statement::Continue => {
+            Stmt::Continue => {
                 if let Some(loop_ctx) = ctx.current_loop() {
                     self.builder.build_unconditional_branch(loop_ctx.cond_bb)?;
                 } else {
@@ -155,15 +155,15 @@ impl<'ctx> Compiler<'ctx> {
                 }
                 Ok(())
             }
-            Statement::Pass
-            | Statement::Struct { .. }
+            Stmt::Pass
+            | Stmt::Struct { .. }
             // Handled at module level
-            | Statement::Enum { .. }
-            | Statement::TypeAlias { .. }
-            | Statement::Function(_)
-            | Statement::Use { .. }
-            | Statement::PubUse { .. } => Ok(()),
-            Statement::For {
+            | Stmt::Enum { .. }
+            | Stmt::TypeAlias { .. }
+            | Stmt::Function(_)
+            | Stmt::Use { .. }
+            | Stmt::PubUse { .. } => Ok(()),
+            Stmt::For {
                 var,
                 iterable,
                 body,
@@ -174,7 +174,7 @@ impl<'ctx> Compiler<'ctx> {
                 function,
                 ctx,
             ),
-            Statement::Block(block) => self.lower_block(block.as_ref(), function, ctx),
+            Stmt::Block(block) => self.lower_block(block.as_ref(), function, ctx),
         }
     }
 

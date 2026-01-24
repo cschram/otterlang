@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use glob::glob;
 use std::path::{Path, PathBuf};
 
-use otterc_ast::nodes::{Function, Statement};
+use otterc_ast::nodes::{Function, Stmt};
 use otterc_lexer::tokenize;
 use otterc_parser::parse;
 
@@ -66,7 +66,7 @@ impl TestDiscovery {
         let mut tests = Vec::new();
 
         for (idx, stmt) in program.statements.iter().enumerate() {
-            if let Statement::Function(func) = stmt.as_ref()
+            if let Stmt::Function(func) = stmt.as_ref()
                 && Self::is_test_function(func.as_ref())
             {
                 let line_number = Self::estimate_line_number(&source, idx);

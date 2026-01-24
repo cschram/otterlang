@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::resolver::ModuleResolver;
-use otterc_ast::nodes::{Program, Statement};
+use otterc_ast::nodes::{Program, Stmt};
 use otterc_lexer::tokenize;
 use otterc_parser::parse;
 
@@ -113,21 +113,21 @@ impl ModuleLoader {
 
         for statement in &program.statements {
             match statement.as_ref() {
-                Statement::Function(function) => {
-                    if function.as_ref().public {
-                        exports.add_function(function.as_ref().name.clone());
+                Stmt::Function { func, .. } => {
+                    if func.as_ref().public {
+                        exports.add_function(func.as_ref().name.to_string());
                     }
                 }
-                Statement::Let { name, public, .. } => {
+                Stmt::Let { name, public, .. } => {
                     if *public {
-                        exports.add_constant(name.as_ref().clone());
+                        exports.add_constant(name.as_ref().to_string());
                     }
                 }
-                Statement::Struct { name, public, .. }
-                | Statement::Enum { name, public, .. }
-                | Statement::TypeAlias { name, public, .. } => {
+                Stmt::Struct { name, public, .. }
+                | Stmt::Enum { name, public, .. }
+                | Stmt::TypeAlias { name, public, .. } => {
                     if *public {
-                        exports.add_type(name.clone());
+                        exports.add_type(name.to_string());
                     }
                 }
                 _ => {}
@@ -144,17 +144,17 @@ impl ModuleLoader {
         module: &mut Module,
         all_modules: &HashMap<PathBuf, Module>,
     ) -> Result<()> {
-        use Statement;
+        use Stmt;
 
         for statement in &module.program.statements {
-            if let Statement::PubUse {
+            if let Stmt::PubUse {
                 module: source_module,
                 item,
                 alias,
             } = statement.as_ref()
             {
                 // Resolve the source module path
-                let source_path = self.resolver.resolve(source_module)?;
+                let source_path = self.resolver.resolve(source_module.as_str())?;
 
                 // Get the source module
                 let source_module_data = all_modules.get(&source_path).ok_or_else(|| {
@@ -170,12 +170,24 @@ impl ModuleLoader {
                     let export_name = alias.as_ref().unwrap_or(item_name);
 
                     // Check if the item exists in the source module
-                    if source_module_data.exports.functions.contains(item_name) {
-                        module.exports.add_function(export_name.clone());
-                    } else if source_module_data.exports.constants.contains(item_name) {
-                        module.exports.add_constant(export_name.clone());
-                    } else if source_module_data.exports.types.contains(item_name) {
-                        module.exports.add_type(export_name.clone());
+                    if source_module_data
+                        .exports
+                        .functions
+                        .contains(&item_name.to_string())
+                    {
+                        module.exports.add_function(export_name.to_string());
+                    } else if source_module_data
+                        .exports
+                        .constants
+                        .contains(&item_name.to_string())
+                    {
+                        module.exports.add_constant(export_name.to_string());
+                    } else if source_module_data
+                        .exports
+                        .types
+                        .contains(&item_name.to_string())
+                    {
+                        module.exports.add_type(export_name.to_string());
                     } else {
                         // Item not found in source module exports
                         return Err(anyhow::anyhow!(

@@ -1,0 +1,10 @@
+struct Person:
+    name: str
+    age: i64
+
+    fn greet(self) -> str:
+        return f"Hello, my name is {self.name} and I am {self.age} years old."
+
+fn main():
+    let alice = Person(name="Alice", age=30)
+    println(alice.greet())

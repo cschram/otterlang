@@ -7,8 +7,8 @@ use std::collections::BTreeSet;
 
 use crate::llvm::compiler::Compiler;
 use crate::llvm::compiler::types::{EvaluatedValue, FunctionContext, OtterType, Variable};
-use otterc_ast::nodes::{BinaryOp, Block, Expr, FStringPart, Literal, Node, Statement, UnaryOp};
-use otterc_typecheck::TypeInfo;
+use otterc_ast::nodes::{BinaryOp, Block, Expr, FStringPart, Literal, Node, Stmt, UnaryOp};
+use otterc_ty::TyKind;
 
 struct CapturedVariable<'ctx> {
     name: String,
@@ -188,8 +188,8 @@ impl<'ctx> Compiler<'ctx> {
         match expr {
             Expr::Literal(_) => {}
             Expr::Identifier(name) => {
-                if ctx.get(name).is_some() {
-                    captures.insert(name.clone());
+                if ctx.get(name.as_str()).is_some() {
+                    captures.insert(name.as_str().to_string());
                 }
             }
             Expr::Member { object, .. } => {
@@ -300,18 +300,18 @@ impl<'ctx> Compiler<'ctx> {
 
     fn collect_captured_names_in_statement(
         &self,
-        stmt: &Statement,
+        stmt: &Stmt,
         ctx: &FunctionContext<'ctx>,
         captures: &mut BTreeSet<String>,
     ) {
         match stmt {
-            Statement::Expr(expr)
-            | Statement::Let { expr, .. }
-            | Statement::Assignment { expr, .. }
-            | Statement::Return(Some(expr)) => {
+            Stmt::Expr(expr)
+            | Stmt::Let { expr, .. }
+            | Stmt::Assignment { expr, .. }
+            | Stmt::Return(Some(expr)) => {
                 self.collect_captured_names(expr.as_ref(), ctx, captures);
             }
-            Statement::If {
+            Stmt::If {
                 cond,
                 then_block,
                 elif_blocks,
@@ -327,27 +327,27 @@ impl<'ctx> Compiler<'ctx> {
                     self.collect_captured_names_in_block(block.as_ref(), ctx, captures);
                 }
             }
-            Statement::For { iterable, body, .. } => {
+            Stmt::For { iterable, body, .. } => {
                 self.collect_captured_names(iterable.as_ref(), ctx, captures);
                 self.collect_captured_names_in_block(body.as_ref(), ctx, captures);
             }
-            Statement::While { cond, body } => {
+            Stmt::While { cond, body } => {
                 self.collect_captured_names(cond.as_ref(), ctx, captures);
                 self.collect_captured_names_in_block(body.as_ref(), ctx, captures);
             }
-            Statement::Block(block) => {
+            Stmt::Block(block) => {
                 self.collect_captured_names_in_block(block.as_ref(), ctx, captures);
             }
-            Statement::Return(None)
-            | Statement::Break
-            | Statement::Continue
-            | Statement::Pass
-            | Statement::Use { .. }
-            | Statement::PubUse { .. }
-            | Statement::Struct { .. }
-            | Statement::Enum { .. }
-            | Statement::TypeAlias { .. }
-            | Statement::Function(_) => {}
+            Stmt::Return(None)
+            | Stmt::Break
+            | Stmt::Continue
+            | Stmt::Pass
+            | Stmt::Use { .. }
+            | Stmt::PubUse { .. }
+            | Stmt::Struct { .. }
+            | Stmt::Enum { .. }
+            | Stmt::TypeAlias { .. }
+            | Stmt::Function { .. } => {}
         }
     }
 
@@ -400,10 +400,10 @@ impl<'ctx> Compiler<'ctx> {
                 self.eval_literal(lit.as_ref(), type_info_opt.as_ref())
             }
             Expr::Identifier(name) => {
-                if let Some(var) = ctx.get(name) {
+                if let Some(var) = ctx.get(name.as_str()) {
                     let var_ty = var.ty.clone();
                     if let Some(basic_ty) = self.basic_type(var_ty.clone())? {
-                        let val = self.builder.build_load(basic_ty, var.ptr, name)?;
+                        let val = self.builder.build_load(basic_ty, var.ptr, name.as_str())?;
                         Ok(EvaluatedValue::with_value(val, var_ty))
                     } else {
                         // Unit type - no value to load
@@ -423,7 +423,7 @@ impl<'ctx> Compiler<'ctx> {
             Expr::Call { func: _, args: _ } => self.eval_call_expr(expr, ctx),
             Expr::Member { object, field } => {
                 if let Some(value) =
-                    self.try_build_enum_member(expr, object.as_ref().as_ref(), field, ctx)?
+                    self.try_build_enum_member(expr, object.as_ref().as_ref(), field.as_str(), ctx)?
                 {
                     Ok(value)
                 } else if self
@@ -444,12 +444,16 @@ impl<'ctx> Compiler<'ctx> {
                     if let OtterType::Struct(struct_id) = object_ty {
                         let struct_value = object_value.value.unwrap().into_struct_value();
                         let info = self.struct_info(struct_id);
-                        let idx = info.field_indices.get(field).copied().ok_or_else(|| {
-                            anyhow!("struct '{}' has no field '{}'", info.name, field)
-                        })?;
+                        let idx =
+                            info.field_indices
+                                .get(field.as_str())
+                                .copied()
+                                .ok_or_else(|| {
+                                    anyhow!("struct '{}' has no field '{}'", info.name, field)
+                                })?;
                         let extracted = self
                             .builder
-                            .build_extract_value(struct_value, idx as u32, field)
+                            .build_extract_value(struct_value, idx as u32, field.as_str())
                             .map_err(|e| anyhow!("failed to extract field '{}': {e}", field))?;
                         let field_ty = info.field_types[idx].clone();
                         Ok(EvaluatedValue::with_value(extracted, field_ty))
@@ -463,7 +467,7 @@ impl<'ctx> Compiler<'ctx> {
             }
             Expr::Struct { name, fields } => {
                 let (struct_id, _) = self
-                    .struct_info_by_name(name)
+                    .struct_info_by_name(name.as_str())
                     .ok_or_else(|| anyhow!("unknown struct type '{}'", name))?;
                 let (struct_name, struct_ty) = {
                     let info = self.struct_info(struct_id);
@@ -473,9 +477,12 @@ impl<'ctx> Compiler<'ctx> {
                 for (field_name, field_expr) in fields {
                     let idx = {
                         let info = self.struct_info(struct_id);
-                        info.field_indices.get(field_name).copied().ok_or_else(|| {
-                            anyhow!("struct '{}' has no field '{}'", struct_name, field_name)
-                        })?
+                        info.field_indices
+                            .get(field_name.as_str())
+                            .copied()
+                            .ok_or_else(|| {
+                                anyhow!("struct '{}' has no field '{}'", struct_name, field_name)
+                            })?
                     };
                     let field_value = self.eval_expr(field_expr.as_ref(), ctx)?;
                     let raw_value = field_value
@@ -489,7 +496,7 @@ impl<'ctx> Compiler<'ctx> {
                         self.coerce_type(raw_value, field_value.ty.clone(), expected_ty)?;
                     aggregate = self
                         .builder
-                        .build_insert_value(aggregate, coerced, idx as u32, field_name)
+                        .build_insert_value(aggregate, coerced, idx as u32, field_name.as_str())
                         .map_err(|e| anyhow!("failed to insert field '{}': {e}", field_name))?
                         .into_struct_value();
                 }
@@ -519,7 +526,7 @@ impl<'ctx> Compiler<'ctx> {
             } => self.eval_list_comprehension(
                 expr,
                 element.as_ref().as_ref(),
-                var,
+                var.as_str(),
                 iterable.as_ref().as_ref(),
                 condition.as_ref().map(|c| c.as_ref().as_ref()),
                 ctx,
@@ -534,7 +541,7 @@ impl<'ctx> Compiler<'ctx> {
                 expr,
                 key.as_ref().as_ref(),
                 value.as_ref().as_ref(),
-                var,
+                var.as_str(),
                 iterable.as_ref().as_ref(),
                 condition.as_ref().map(|c| c.as_ref().as_ref()),
                 ctx,
@@ -684,7 +691,7 @@ impl<'ctx> Compiler<'ctx> {
         &mut self,
         pattern: &Node<otterc_ast::nodes::Pattern>,
         matched_val: &EvaluatedValue<'ctx>,
-        matched_type: Option<TypeInfo>,
+        matched_type: Option<TyKind>,
         success_bb: inkwell::basic_block::BasicBlock<'ctx>,
         fail_bb: inkwell::basic_block::BasicBlock<'ctx>,
         ctx: &mut FunctionContext<'ctx>,
@@ -713,14 +720,15 @@ impl<'ctx> Compiler<'ctx> {
                     .get_parent()
                     .unwrap();
                 let matched_ty = matched_val.ty.clone();
-                let alloca = self.create_entry_block_alloca(function, name, matched_ty.clone())?;
+                let alloca =
+                    self.create_entry_block_alloca(function, name.as_str(), matched_ty.clone())?;
 
                 if let Some(v) = matched_val.value {
                     self.builder.build_store(alloca, v)?;
                 }
 
                 ctx.insert(
-                    name.clone(),
+                    name.to_string(),
                     crate::llvm::compiler::types::Variable {
                         ptr: alloca,
                         ty: matched_ty,
@@ -749,7 +757,7 @@ impl<'ctx> Compiler<'ctx> {
                     .into_int_value();
 
                 let layout = self
-                    .enum_layout(enum_name)
+                    .enum_layout(enum_name.as_str())
                     .ok_or_else(|| anyhow!("Enum layout not found for {}", enum_name))?;
                 let expected_tag = layout
                     .tag_of(variant)
@@ -784,7 +792,11 @@ impl<'ctx> Compiler<'ctx> {
 
                     // Get concrete field types for this variant (respecting generic substitutions)
                     let variant_fields = self
-                        .resolve_enum_variant_fields(enum_name, variant, matched_type.as_ref())
+                        .resolve_enum_variant_fields(
+                            enum_name.as_str(),
+                            variant.as_str(),
+                            matched_type.as_ref(),
+                        )
                         .ok_or_else(|| {
                             anyhow!("Variant {} not found in enum {}", variant, enum_name)
                         })?;
@@ -918,7 +930,7 @@ impl<'ctx> Compiler<'ctx> {
 
                 // Track the element type if available so nested patterns get concrete type info
                 let element_type = matched_type.as_ref().and_then(|ty| match ty {
-                    TypeInfo::List(inner) => Some((**inner).clone()),
+                    TyKind::List(inner) => Some((**inner).clone()),
                     _ => None,
                 });
 
@@ -974,12 +986,12 @@ impl<'ctx> Compiler<'ctx> {
                         .unwrap_or_else(OtterType::opaque_list);
                     let alloca = self.create_entry_block_alloca(
                         function,
-                        rest_name,
+                        rest_name.as_str(),
                         rest_list_type.clone(),
                     )?;
                     self.builder.build_store(alloca, handle)?;
                     ctx.insert(
-                        rest_name.clone(),
+                        rest_name.to_string(),
                         crate::llvm::compiler::types::Variable {
                             ptr: alloca,
                             ty: rest_list_type,
@@ -997,9 +1009,9 @@ impl<'ctx> Compiler<'ctx> {
         &self,
         enum_name: &str,
         variant: &str,
-        matched_type: Option<&TypeInfo>,
-    ) -> Option<Vec<TypeInfo>> {
-        if let Some(TypeInfo::Enum { name, args, .. }) = matched_type
+        matched_type: Option<&TyKind>,
+    ) -> Option<Vec<TyKind>> {
+        if let Some(TyKind::Enum { name, args, .. }) = matched_type
             && name == enum_name
             && let Some(layout) = self.enum_layout(enum_name)
         {
@@ -1068,7 +1080,7 @@ impl<'ctx> Compiler<'ctx> {
         ctx: &mut FunctionContext<'ctx>,
     ) -> Result<EvaluatedValue<'ctx>> {
         for stmt in &block.as_ref().statements {
-            if let Statement::Expr(e) = stmt.as_ref() {
+            if let Stmt::Expr(e) = stmt.as_ref() {
                 if std::ptr::eq(stmt, block.as_ref().statements.last().unwrap()) {
                     return self.eval_expr(e.as_ref(), ctx);
                 } else {
@@ -1113,16 +1125,16 @@ impl<'ctx> Compiler<'ctx> {
     fn eval_literal(
         &mut self,
         lit: &Literal,
-        type_info: Option<&TypeInfo>,
+        type_info: Option<&TyKind>,
     ) -> Result<EvaluatedValue<'ctx>> {
         match lit {
             Literal::Number(n) => {
                 // Use type checker's type information if available
                 let inferred_type = if let Some(type_info) = type_info {
                     match type_info {
-                        TypeInfo::I64 => OtterType::I64,
-                        TypeInfo::I32 => OtterType::I32,
-                        TypeInfo::F64 => OtterType::F64,
+                        TyKind::I64 => OtterType::I64,
+                        TyKind::I32 => OtterType::I32,
+                        TyKind::F64 => OtterType::F64,
                         _ => {
                             // Fallback: use the literal's is_float_literal flag or check value
                             let is_float = n.is_float_literal || n.value.fract() != 0.0;
@@ -2121,7 +2133,7 @@ impl<'ctx> Compiler<'ctx> {
     fn eval_array_expr(
         &mut self,
         elements: &[Node<Expr>],
-        expr_type: Option<&TypeInfo>,
+        expr_type: Option<&TyKind>,
         ctx: &mut FunctionContext<'ctx>,
     ) -> Result<EvaluatedValue<'ctx>> {
         // Create a new empty list
@@ -2578,7 +2590,7 @@ impl<'ctx> Compiler<'ctx> {
 
     fn find_identifier_type_in_expr(&self, expr: &Expr, var: &str) -> Option<OtterType> {
         match expr {
-            Expr::Identifier(name) if name == var => self
+            Expr::Identifier(name) if name.as_str() == var => self
                 .expr_type(expr)
                 .and_then(|ty| self.typeinfo_to_otter_type(ty)),
             Expr::Identifier(_) | Expr::Literal(_) => None,
@@ -2639,7 +2651,7 @@ impl<'ctx> Compiler<'ctx> {
                 iterable,
                 condition,
             } => {
-                if inner_var == var {
+                if inner_var.as_str() == var {
                     None
                 } else {
                     self.find_identifier_type_in_expr(iterable.as_ref().as_ref(), var)
@@ -2660,7 +2672,7 @@ impl<'ctx> Compiler<'ctx> {
                 iterable,
                 condition,
             } => {
-                if inner_var == var {
+                if inner_var.as_str() == var {
                     None
                 } else {
                     self.find_identifier_type_in_expr(iterable.as_ref().as_ref(), var)
@@ -2690,25 +2702,25 @@ impl<'ctx> Compiler<'ctx> {
             .find_map(|stmt| self.find_identifier_type_in_statement(stmt.as_ref(), var))
     }
 
-    fn find_identifier_type_in_statement(&self, stmt: &Statement, var: &str) -> Option<OtterType> {
+    fn find_identifier_type_in_statement(&self, stmt: &Stmt, var: &str) -> Option<OtterType> {
         match stmt {
-            Statement::Expr(expr)
-            | Statement::Return(Some(expr))
-            | Statement::Let { expr, .. }
-            | Statement::Assignment { expr, .. } => {
+            Stmt::Expr(expr)
+            | Stmt::Return(Some(expr))
+            | Stmt::Let { expr, .. }
+            | Stmt::Assignment { expr, .. } => {
                 self.find_identifier_type_in_expr(expr.as_ref(), var)
             }
-            Statement::Return(None)
-            | Statement::Break
-            | Statement::Continue
-            | Statement::Pass
-            | Statement::Struct { .. }
-            | Statement::Enum { .. }
-            | Statement::TypeAlias { .. }
-            | Statement::Use { .. }
-            | Statement::PubUse { .. }
-            | Statement::Function(_) => None,
-            Statement::If {
+            Stmt::Return(None)
+            | Stmt::Break
+            | Stmt::Continue
+            | Stmt::Pass
+            | Stmt::Struct { .. }
+            | Stmt::Enum { .. }
+            | Stmt::TypeAlias { .. }
+            | Stmt::Use { .. }
+            | Stmt::PubUse { .. }
+            | Stmt::Function { .. } => None,
+            Stmt::If {
                 cond,
                 then_block,
                 elif_blocks,
@@ -2727,13 +2739,13 @@ impl<'ctx> Compiler<'ctx> {
                         .as_ref()
                         .and_then(|block| self.find_identifier_type_in_block(block.as_ref(), var))
                 }),
-            Statement::While { cond, body } => self
+            Stmt::While { cond, body } => self
                 .find_identifier_type_in_expr(cond.as_ref(), var)
                 .or_else(|| self.find_identifier_type_in_block(body.as_ref(), var)),
-            Statement::For { iterable, body, .. } => self
+            Stmt::For { iterable, body, .. } => self
                 .find_identifier_type_in_expr(iterable.as_ref(), var)
                 .or_else(|| self.find_identifier_type_in_block(body.as_ref(), var)),
-            Statement::Block(block) => self.find_identifier_type_in_block(block.as_ref(), var),
+            Stmt::Block(block) => self.find_identifier_type_in_block(block.as_ref(), var),
         }
     }
 
@@ -2806,10 +2818,10 @@ impl<'ctx> Compiler<'ctx> {
         args: &[Node<Expr>],
         ctx: &mut FunctionContext<'ctx>,
     ) -> Result<Option<EvaluatedValue<'ctx>>> {
-        if let (Expr::Member { object, field }, Some(enum_type @ TypeInfo::Enum { .. })) =
+        if let (Expr::Member { object, field }, Some(enum_type @ TyKind::Enum { .. })) =
             (func_expr, self.expr_type(call_expr).cloned())
         {
-            let TypeInfo::Enum {
+            let TyKind::Enum {
                 name: enum_name, ..
             } = &enum_type
             else {
@@ -2859,14 +2871,14 @@ impl<'ctx> Compiler<'ctx> {
                 evaluated_args.push(self.eval_expr(arg.as_ref(), ctx)?);
             }
 
-            let field_types: Vec<TypeInfo> = evaluated_args
+            let field_types: Vec<TyKind> = evaluated_args
                 .iter()
                 .map(|val| match val.ty.clone() {
-                    OtterType::I64 => TypeInfo::I64,
-                    OtterType::F64 => TypeInfo::F64,
-                    OtterType::Bool => TypeInfo::Bool,
-                    OtterType::Str => TypeInfo::Str,
-                    _ => TypeInfo::Unknown,
+                    OtterType::I64 => TyKind::I64,
+                    OtterType::F64 => TyKind::F64,
+                    OtterType::Bool => TyKind::Bool,
+                    OtterType::Str => TyKind::Str,
+                    _ => TyKind::Unknown,
                 })
                 .collect();
 
@@ -2890,7 +2902,7 @@ impl<'ctx> Compiler<'ctx> {
         field: &str,
         _ctx: &mut FunctionContext<'ctx>,
     ) -> Result<Option<EvaluatedValue<'ctx>>> {
-        if let Some(enum_type_ref @ TypeInfo::Enum { variants, .. }) = self.expr_type(expr)
+        if let Some(enum_type_ref @ TyKind::Enum { variants, .. }) = self.expr_type(expr)
             && let Some(variant) = variants.get(field)
             && variant.fields.is_empty()
         {
@@ -2906,7 +2918,7 @@ impl<'ctx> Compiler<'ctx> {
 
     fn module_path_from_expr(&self, expr: &Expr) -> Option<String> {
         self.expr_type(expr).and_then(|ty| match ty {
-            TypeInfo::Module(name) => Some(name.clone()),
+            TyKind::Module(name) => Some(name.clone()),
             _ => None,
         })
     }
@@ -2932,7 +2944,7 @@ impl<'ctx> Compiler<'ctx> {
 
     fn flatten_member_chain(&self, expr: &Expr) -> Option<String> {
         match expr {
-            Expr::Identifier(name) => Some(name.clone()),
+            Expr::Identifier(name) => Some(name.to_string()),
             Expr::Member { object, field } => {
                 let prefix = self.flatten_member_chain(object.as_ref().as_ref())?;
                 Some(format!("{}.{}", prefix, field))
@@ -2943,11 +2955,11 @@ impl<'ctx> Compiler<'ctx> {
 
     fn build_enum_value_from_type(
         &mut self,
-        enum_type: &TypeInfo,
+        enum_type: &TyKind,
         variant_name: &str,
         values: Vec<EvaluatedValue<'ctx>>,
     ) -> Result<EvaluatedValue<'ctx>> {
-        if let TypeInfo::Enum { name, variants, .. } = enum_type {
+        if let TyKind::Enum { name, variants, .. } = enum_type {
             let layout = self
                 .enum_layout(name)
                 .ok_or_else(|| anyhow!("Missing enum layout for {name}"))?;
@@ -2978,7 +2990,7 @@ impl<'ctx> Compiler<'ctx> {
         _enum_name: &str,
         _variant_name: &str,
         tag: u32,
-        field_types: &[TypeInfo],
+        field_types: &[TyKind],
         values: Vec<EvaluatedValue<'ctx>>,
     ) -> Result<EvaluatedValue<'ctx>> {
         let i64_type = self.context.i64_type();
@@ -3007,7 +3019,7 @@ impl<'ctx> Compiler<'ctx> {
         &mut self,
         handle: BasicValueEnum<'ctx>,
         index: u32,
-        field_type: &TypeInfo,
+        field_type: &TyKind,
         value: EvaluatedValue<'ctx>,
     ) -> Result<()> {
         let i64_type = self.context.i64_type();
@@ -3125,12 +3137,12 @@ enum EnumFieldKind {
     Ptr,
 }
 
-fn enum_field_kind(field_type: &TypeInfo) -> EnumFieldKind {
+fn enum_field_kind(field_type: &TyKind) -> EnumFieldKind {
     match field_type {
-        TypeInfo::Bool => EnumFieldKind::Bool,
-        TypeInfo::I32 | TypeInfo::I64 => EnumFieldKind::Int,
-        TypeInfo::F64 => EnumFieldKind::Float,
-        TypeInfo::Alias { underlying, .. } => enum_field_kind(underlying),
+        TyKind::Bool => EnumFieldKind::Bool,
+        TyKind::I32 | TyKind::I64 => EnumFieldKind::Int,
+        TyKind::F64 => EnumFieldKind::Float,
+        TyKind::Alias { underlying, .. } => enum_field_kind(underlying),
         _ => EnumFieldKind::Ptr,
     }
 }

@@ -1229,11 +1229,11 @@ fn register_rust_ffi_functions_for_typecheck(
 fn collect_rust_imports_for_typecheck(
     program: &otterc_ast::nodes::Program,
 ) -> HashMap<String, HashSet<String>> {
-    use otterc_ast::nodes::Statement;
+    use otterc_ast::nodes::Stmt;
     let mut imports: HashMap<String, HashSet<String>> = HashMap::new();
 
     for statement in &program.statements {
-        if let Statement::Use {
+        if let Stmt::Use {
             imports: use_imports,
         } = statement.as_ref()
         {

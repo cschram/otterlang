@@ -1,0 +1,14 @@
+[package]
+name = "otterc_ty"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+otterc_error.path = "../otterc_error"
+otterc_ident.path = "../otterc_ident"
+otterc_span.path = "../otterc_span"
+ahash.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

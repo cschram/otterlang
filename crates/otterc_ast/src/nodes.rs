@@ -2,7 +2,10 @@ use std::convert::{AsMut, AsRef};
 use std::fmt::{Debug, Display};
 use std::hash::{Hash, Hasher};
 
+use otterc_ident::Identifier;
 use otterc_span::Span;
+use otterc_symbol::{Symbol, Visibility};
+use otterc_ty::{GenericArg, TyId, TyRef};
 
 /// A node in the AST with an associated span.
 #[derive(Debug, Clone)]
@@ -27,8 +30,12 @@ impl<T> Node<T> {
         (self.value, self.span)
     }
 
-    pub fn span(&self) -> &Span {
-        &self.span
+    pub fn parts(&self) -> (&T, Span) {
+        (&self.value, self.span)
+    }
+
+    pub fn span(&self) -> Span {
+        self.span
     }
 
     pub fn map<U, F>(self, f: F) -> Node<U>
@@ -85,18 +92,18 @@ where
 
 #[derive(Debug, Clone)]
 pub struct Program {
-    pub statements: Vec<Node<Statement>>,
+    pub statements: Vec<Node<Stmt>>,
 }
 
 impl Program {
-    pub fn new(statements: Vec<Node<Statement>>) -> Self {
+    pub fn new(statements: Vec<Node<Stmt>>) -> Self {
         Self { statements }
     }
 
     /// Get all function definitions in the program
     pub fn functions(&self) -> impl Iterator<Item = &Node<Function>> {
         self.statements.iter().filter_map(|stmt| {
-            if let Statement::Function(func) = stmt.as_ref() {
+            if let Stmt::Function { func, .. } = stmt.as_ref() {
                 Some(func)
             } else {
                 None
@@ -115,116 +122,108 @@ impl Program {
 
 #[derive(Debug, Clone)]
 pub struct Function {
-    pub name: String,
+    pub name: Identifier,
     pub params: Vec<Node<Param>>,
-    pub ret_ty: Option<Node<Type>>,
+    pub ret_ty: Option<Node<TyRef>>,
     pub body: Node<Block>,
-    pub public: bool,
+    pub visibility: Visibility,
+    pub ty_id: Option<TyId>,
 }
 
 impl Function {
     pub fn new(
-        name: impl Into<String>,
+        name: Identifier,
         params: Vec<Node<Param>>,
-        ret_ty: Option<Node<Type>>,
+        ret_ty: Option<Node<TyRef>>,
         body: Node<Block>,
     ) -> Self {
         Self {
-            name: name.into(),
+            name,
             params,
             ret_ty,
             body,
-            public: false,
+            visibility: Visibility::Private,
+            ty_id: None,
         }
     }
 
     pub fn new_public(
-        name: impl Into<String>,
+        name: Identifier,
         params: Vec<Node<Param>>,
-        ret_ty: Option<Node<Type>>,
+        ret_ty: Option<Node<TyRef>>,
         body: Node<Block>,
     ) -> Self {
         Self {
-            name: name.into(),
+            name,
             params,
             ret_ty,
             body,
-            public: true,
+            visibility: Visibility::Public,
+            ty_id: None,
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Type {
-    Simple(String),
-    Generic { base: String, args: Vec<Node<Type>> },
-}
-
 #[derive(Debug, Clone)]
 pub struct Param {
-    pub name: Node<String>,
-    pub ty: Option<Node<Type>>,
+    pub name: Node<Identifier>,
+    pub ty: Node<TyRef>,
     pub default: Option<Node<Expr>>,
 }
 
 impl Param {
-    pub fn new(name: Node<String>, ty: Option<Node<Type>>, default: Option<Node<Expr>>) -> Self {
+    pub fn new(name: Node<Identifier>, ty: Node<TyRef>, default: Option<Node<Expr>>) -> Self {
         Self { name, ty, default }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct Block {
-    pub statements: Vec<Node<Statement>>,
+    pub statements: Vec<Node<Stmt>>,
 }
 
 impl Block {
-    pub fn new(statements: Vec<Node<Statement>>) -> Self {
+    pub fn new(statements: Vec<Node<Stmt>>) -> Self {
         Self { statements }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct UseImport {
-    pub module: String,
-    pub alias: Option<String>,
+    pub module: Identifier,
+    pub alias: Option<Identifier>,
 }
 
 impl UseImport {
-    pub fn new(module: impl Into<String>, alias: Option<String>) -> Self {
-        Self {
-            module: module.into(),
-            alias,
-        }
+    pub fn new(module: Identifier, alias: Option<Identifier>) -> Self {
+        Self { module, alias }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct EnumVariant {
-    pub name: String,
-    pub fields: Vec<Node<Type>>,
+    pub name: Identifier,
+    pub fields: Vec<Node<TyRef>>,
 }
 
 impl EnumVariant {
-    pub fn new(name: impl Into<String>, fields: Vec<Node<Type>>) -> Self {
-        Self {
-            name: name.into(),
-            fields,
-        }
+    pub fn new(name: Identifier, fields: Vec<Node<TyRef>>) -> Self {
+        Self { name, fields }
     }
 }
 
 #[derive(Debug, Clone)]
-pub enum Statement {
+pub enum Stmt {
     // Variable declarations and assignments
     Let {
-        name: Node<String>,
+        name: Node<Identifier>,
         expr: Node<Expr>,
-        ty: Option<Node<Type>>,
-        public: bool,
+        ty: Option<Node<TyRef>>,
+        visibility: Visibility,
+        sym: Option<Symbol>, // Filled in during type resolution
     },
     Assignment {
-        name: Node<String>,
+        name: Node<Identifier>,
         expr: Node<Expr>,
     },
 
@@ -236,7 +235,7 @@ pub enum Statement {
         else_block: Option<Node<Block>>,
     },
     For {
-        var: Node<String>,
+        var: Node<Identifier>,
         iterable: Node<Expr>,
         body: Node<Block>,
     },
@@ -250,27 +249,33 @@ pub enum Statement {
     Return(Option<Node<Expr>>),
 
     // Function definitions
-    Function(Node<Function>),
+    Function {
+        func: Node<Function>,
+        sym: Option<Symbol>, // Filled in during type resolution
+    },
 
     // Type definitions
     Struct {
-        name: String,
-        fields: Vec<(String, Node<Type>)>,
+        name: Identifier,
+        fields: Vec<(Identifier, Node<TyRef>)>,
         methods: Vec<Node<Function>>, // Methods (functions with self parameter)
-        public: bool,
-        generics: Vec<String>, // Generic type parameters
+        visibility: Visibility,
+        generics: Vec<GenericArg>, // Generic type parameters
+        sym: Option<Symbol>,       // Filled in during type resolution
     },
     Enum {
-        name: String,
+        name: Identifier,
         variants: Vec<Node<EnumVariant>>,
-        public: bool,
-        generics: Vec<String>,
+        visibility: Visibility,
+        generics: Vec<GenericArg>,
+        sym: Option<Symbol>, // Filled in during type resolution
     },
     TypeAlias {
-        name: String,
-        target: Node<Type>,
-        public: bool,
-        generics: Vec<String>, // Generic type parameters
+        name: Identifier,
+        target: Node<TyRef>,
+        visibility: Visibility,
+        generics: Vec<GenericArg>, // Generic type parameters
+        sym: Option<Symbol>,       // Filled in during type resolution
     },
 
     // Expressions as statements
@@ -283,33 +288,33 @@ pub enum Statement {
 
     // Re-exports
     PubUse {
-        module: String,
-        item: Option<String>,  // None means re-export all public items
-        alias: Option<String>, // Optional rename
+        module: Identifier,
+        item: Option<Identifier>,  // None means re-export all public items
+        alias: Option<Identifier>, // Optional rename
     },
 
     // Blocks (for grouping)
     Block(Node<Block>),
 }
 
-impl Statement {
+impl Stmt {
     /// Recursively count statements
     pub fn recursive_count(&self) -> usize {
         match self {
-            Statement::Let { .. }
-            | Statement::Assignment { .. }
-            | Statement::Break
-            | Statement::Continue
-            | Statement::Pass
-            | Statement::Return(_)
-            | Statement::Expr(_)
-            | Statement::Use { .. }
-            | Statement::PubUse { .. }
-            | Statement::Struct { .. }
-            | Statement::Enum { .. }
-            | Statement::TypeAlias { .. } => 1,
+            Stmt::Let { .. }
+            | Stmt::Assignment { .. }
+            | Stmt::Break
+            | Stmt::Continue
+            | Stmt::Pass
+            | Stmt::Return(_)
+            | Stmt::Expr(_)
+            | Stmt::Use { .. }
+            | Stmt::PubUse { .. }
+            | Stmt::Struct { .. }
+            | Stmt::Enum { .. }
+            | Stmt::TypeAlias { .. } => 1,
 
-            Statement::If {
+            Stmt::If {
                 then_block,
                 elif_blocks,
                 else_block,
@@ -325,11 +330,11 @@ impl Statement {
                 }
                 count
             }
-            Statement::For { body, .. } | Statement::While { body, .. } => {
+            Stmt::For { body, .. } | Stmt::While { body, .. } => {
                 1 + body.as_ref().recursive_count()
             }
-            Statement::Function(func) => 1 + func.as_ref().body.as_ref().recursive_count(),
-            Statement::Block(block) => block.as_ref().recursive_count(),
+            Stmt::Function { func, .. } => 1 + func.as_ref().body.as_ref().recursive_count(),
+            Stmt::Block(block) => block.as_ref().recursive_count(),
         }
     }
 
@@ -337,7 +342,7 @@ impl Statement {
     pub fn is_pure(&self) -> bool {
         matches!(
             self,
-            Statement::Let { .. } | Statement::Break | Statement::Continue | Statement::Pass
+            Stmt::Let { .. } | Stmt::Break | Stmt::Continue | Stmt::Pass
         )
     }
 }
@@ -363,10 +368,10 @@ pub enum Expr {
     Literal(Node<Literal>),
 
     // Variables and access
-    Identifier(String),
+    Identifier(Identifier),
     Member {
         object: Box<Node<Expr>>,
-        field: String,
+        field: Identifier,
     },
 
     // Function calls
@@ -389,10 +394,11 @@ pub enum Expr {
     },
 
     // Control flow expressions
+    // NOTE: Not implemented yet
     If {
         cond: Box<Node<Expr>>,
         then_branch: Box<Node<Expr>>,
-        else_branch: Option<Box<Node<Expr>>>,
+        else_branch: Box<Node<Expr>>,
     },
 
     // Match expressions (pattern matching)
@@ -412,14 +418,14 @@ pub enum Expr {
     Dict(Vec<(Node<Expr>, Node<Expr>)>), // Key-value pairs
     ListComprehension {
         element: Box<Node<Expr>>,
-        var: String,
+        var: Identifier,
         iterable: Box<Node<Expr>>,
         condition: Option<Box<Node<Expr>>>,
     },
     DictComprehension {
         key: Box<Node<Expr>>,
         value: Box<Node<Expr>>,
-        var: String,
+        var: Identifier,
         iterable: Box<Node<Expr>>,
         condition: Option<Box<Node<Expr>>>,
     },
@@ -435,8 +441,8 @@ pub enum Expr {
 
     // Struct instantiation
     Struct {
-        name: String,
-        fields: Vec<(String, Node<Expr>)>, // field name -> value
+        name: Identifier,
+        fields: Vec<(Identifier, Node<Expr>)>, // field name -> value
     },
 }
 
@@ -456,22 +462,22 @@ pub enum Pattern {
     /// Literal pattern (1, true, "hello")
     Literal(Node<Literal>),
     /// Identifier pattern (binds to variable)
-    Identifier(String),
+    Identifier(Identifier),
     /// Enum variant pattern (Enum.Variant(...))
     EnumVariant {
-        enum_name: String,
-        variant: String,
+        enum_name: Identifier,
+        variant: Identifier,
         fields: Vec<Node<Pattern>>,
     },
     /// Tuple/struct pattern (Point { x, y })
     Struct {
-        name: String,
-        fields: Vec<(String, Option<Node<Pattern>>)>, // field name and optional nested pattern
+        name: Identifier,
+        fields: Vec<(Identifier, Option<Node<Pattern>>)>, // field name and optional nested pattern
     },
     /// Array/list pattern ([a, b, ..rest])
     Array {
         patterns: Vec<Node<Pattern>>,
-        rest: Option<String>, // Variable name for rest pattern
+        rest: Option<Identifier>, // Variable name for rest pattern
     },
 }
 
@@ -503,6 +509,29 @@ pub enum BinaryOp {
     // Logical
     And,
     Or,
+}
+
+impl Display for BinaryOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let op_str = match self {
+            BinaryOp::Add => "+",
+            BinaryOp::Sub => "-",
+            BinaryOp::Mul => "*",
+            BinaryOp::Div => "/",
+            BinaryOp::Mod => "%",
+            BinaryOp::Eq => "==",
+            BinaryOp::Ne => "!=",
+            BinaryOp::Lt => "<",
+            BinaryOp::Gt => ">",
+            BinaryOp::LtEq => "<=",
+            BinaryOp::GtEq => ">=",
+            BinaryOp::Is => "is",
+            BinaryOp::IsNot => "is not",
+            BinaryOp::And => "and",
+            BinaryOp::Or => "or",
+        };
+        write!(f, "{}", op_str)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

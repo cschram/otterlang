@@ -21,7 +21,7 @@ impl Span {
     /// Creates a new span, starting from the lowest start, and continuing to the highest end
     #[inline]
     #[must_use]
-    pub fn merge(&self, other: &Self) -> Self {
+    pub fn merge(&self, other: Self) -> Self {
         Self::new(self.start.min(other.start), self.end.max(other.end))
     }
 

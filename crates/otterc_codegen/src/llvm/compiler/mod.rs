@@ -12,12 +12,13 @@ use inkwell::types::{BasicType, BasicTypeEnum, PointerType, StructType};
 use inkwell::values::{FunctionValue, PointerValue};
 
 use crate::llvm::bridges::prepare_rust_bridges;
-use otterc_ast::nodes::{Block, Expr, FStringPart, Function, Node, Program, Statement};
+use otterc_ast::nodes::{Block, Expr, FStringPart, Function, Node, Program, Stmt};
 use otterc_config::CodegenOptLevel;
 use otterc_config::TargetTriple;
 use otterc_span::Span;
 use otterc_symbol::registry::SymbolRegistry;
-use otterc_typecheck::{EnumLayout, TypeInfo};
+use otterc_ty::{TyKind, TypeRegistry};
+// use otterc_typecheck::{EnumLayout, Ty};
 
 pub mod expr;
 pub mod stmt;
@@ -42,11 +43,11 @@ pub struct Compiler<'ctx> {
     pub(crate) string_ptr_type: PointerType<'ctx>,
     pub(crate) declared_functions: HashMap<String, FunctionValue<'ctx>>,
     pub(crate) function_return_types: HashMap<String, OtterType>,
-    pub(crate) expr_types: HashMap<usize, TypeInfo>,
-    expr_types_by_span: HashMap<Span, TypeInfo>,
-    pub(crate) comprehension_var_types: HashMap<Span, TypeInfo>,
+    pub(crate) expr_types: HashMap<usize, TyKind>,
+    expr_types_by_span: HashMap<Span, TyKind>,
+    pub(crate) comprehension_var_types: HashMap<Span, TyKind>,
     expr_spans: HashMap<usize, Span>,
-    pub(crate) enum_layouts: HashMap<String, EnumLayout>,
+    // pub(crate) enum_layouts: HashMap<String, EnumLayout>,
     pub(crate) function_defaults: HashMap<String, Vec<Option<Expr>>>,
     #[expect(dead_code, reason = "Work in progress")]
     pub(crate) lambda_counter: AtomicUsize,
@@ -69,27 +70,27 @@ impl<'ctx> Compiler<'ctx> {
         }
     }
 
-    fn record_statement_spans(&mut self, stmt: &Statement) {
+    fn record_statement_spans(&mut self, stmt: &Stmt) {
         match stmt {
-            Statement::Expr(expr)
-            | Statement::Let { expr, .. }
-            | Statement::Assignment { expr, .. }
-            | Statement::Return(Some(expr)) => self.record_expr_spans(expr),
-            Statement::Return(None)
-            | Statement::Break
-            | Statement::Continue
-            | Statement::Pass
-            | Statement::Use { .. }
-            | Statement::PubUse { .. }
-            | Statement::Enum { .. }
-            | Statement::TypeAlias { .. } => {}
-            Statement::Struct { methods, .. } => {
+            Stmt::Expr(expr)
+            | Stmt::Let { expr, .. }
+            | Stmt::Assignment { expr, .. }
+            | Stmt::Return(Some(expr)) => self.record_expr_spans(expr),
+            Stmt::Return(None)
+            | Stmt::Break
+            | Stmt::Continue
+            | Stmt::Pass
+            | Stmt::Use { .. }
+            | Stmt::PubUse { .. }
+            | Stmt::Enum { .. }
+            | Stmt::TypeAlias { .. } => {}
+            Stmt::Struct { methods, .. } => {
                 for method in methods {
                     self.record_function_spans(method.as_ref());
                 }
             }
-            Statement::Function(func) => self.record_function_spans(func.as_ref()),
-            Statement::If {
+            Stmt::Function(func) => self.record_function_spans(func.as_ref()),
+            Stmt::If {
                 cond,
                 then_block,
                 elif_blocks,
@@ -105,15 +106,15 @@ impl<'ctx> Compiler<'ctx> {
                     self.record_block_spans(block.as_ref());
                 }
             }
-            Statement::For { iterable, body, .. } => {
+            Stmt::For { iterable, body, .. } => {
                 self.record_expr_spans(iterable);
                 self.record_block_spans(body.as_ref());
             }
-            Statement::While { cond, body } => {
+            Stmt::While { cond, body } => {
                 self.record_expr_spans(cond);
                 self.record_block_spans(body.as_ref());
             }
-            Statement::Block(block) => self.record_block_spans(block.as_ref()),
+            Stmt::Block(block) => self.record_block_spans(block.as_ref()),
         }
     }
 
@@ -221,10 +222,10 @@ impl<'ctx> Compiler<'ctx> {
         module: Module<'ctx>,
         builder: Builder<'ctx>,
         symbol_registry: &'static SymbolRegistry,
-        expr_types: HashMap<usize, TypeInfo>,
-        expr_types_by_span: HashMap<Span, TypeInfo>,
-        comprehension_var_types: HashMap<Span, TypeInfo>,
-        enum_layouts: HashMap<String, EnumLayout>,
+        expr_types: HashMap<usize, TyKind>,
+        expr_types_by_span: HashMap<Span, TyKind>,
+        comprehension_var_types: HashMap<Span, TyKind>,
+        // enum_layouts: HashMap<String, EnumLayout>,
         target_triple: Option<TargetTriple>,
     ) -> Self {
         let fpm = PassManager::create(&module);
@@ -252,7 +253,7 @@ impl<'ctx> Compiler<'ctx> {
             expr_types_by_span,
             comprehension_var_types,
             expr_spans: HashMap::new(),
-            enum_layouts,
+            // enum_layouts,
             function_defaults: HashMap::new(),
             lambda_counter: AtomicUsize::new(0),
             next_spawn_id: 0,
@@ -275,7 +276,7 @@ impl<'ctx> Compiler<'ctx> {
         self.compile_module(program)
     }
 
-    pub(crate) fn expr_type(&self, expr: &Expr) -> Option<&TypeInfo> {
+    pub(crate) fn expr_type(&self, expr: &Expr) -> Option<&TyKind> {
         let id = expr as *const Expr as usize;
         self.expr_types.get(&id).or_else(|| {
             self.expr_spans
@@ -284,9 +285,9 @@ impl<'ctx> Compiler<'ctx> {
         })
     }
 
-    pub(crate) fn enum_layout(&self, name: &str) -> Option<&EnumLayout> {
-        self.enum_layouts.get(name)
-    }
+    // pub(crate) fn enum_layout(&self, name: &str) -> Option<&EnumLayout> {
+    //     self.enum_layouts.get(name)
+    // }
 
     fn ensure_struct_info(&mut self, name: &str) -> (u32, StructType<'ctx>) {
         if let Some(&id) = self.struct_ids.get(name) {
@@ -320,7 +321,7 @@ impl<'ctx> Compiler<'ctx> {
     }
 
     pub(crate) fn struct_type_from_expr(&self, expr: &Expr) -> Option<OtterType> {
-        if let Some(TypeInfo::Struct { name, .. }) = self.expr_type(expr) {
+        if let Some(TyKind::Struct { name, .. }) = self.expr_type(expr) {
             return self.struct_id(name).map(OtterType::Struct);
         }
         None
@@ -380,10 +381,10 @@ impl<'ctx> Compiler<'ctx> {
         // First pass: register all functions and types
         for statement in &program.statements {
             match statement.as_ref() {
-                Statement::Function(func) => {
+                Stmt::Function(func) => {
                     self.register_function_prototype(func.as_ref())?;
                 }
-                Statement::Struct {
+                Stmt::Struct {
                     name,
                     fields,
                     methods,
@@ -421,11 +422,11 @@ impl<'ctx> Compiler<'ctx> {
         // Second pass: compile function bodies
         for statement in &program.statements {
             match statement.as_ref() {
-                Statement::Function(func) => {
+                Stmt::Function(func) => {
                     self.record_function_spans(func.as_ref());
                     self.compile_function(func.as_ref())?;
                 }
-                Statement::Struct { name, methods, .. } => {
+                Stmt::Struct { name, methods, .. } => {
                     for method in methods {
                         let mut method_func = method.as_ref().clone();
                         method_func.name = format!("{}_{}", name, method_func.name);

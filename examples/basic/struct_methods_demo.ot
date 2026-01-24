@@ -1,8 +1,0 @@
-fn factorial(n: float) -> float:
-    if n <= 1.0:
-        return 1.0
-    return n * factorial(n - 1.0)
-
-fn main():
-    let result = factorial(5.0)
-

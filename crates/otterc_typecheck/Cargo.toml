@@ -6,11 +6,21 @@ edition = "2024"
 [dependencies]
 otterc_ast.path = "../otterc_ast"
 otterc_config.path = "../otterc_config"
+otterc_ident.path = "../otterc_ident"
 otterc_span.path = "../otterc_span"
 otterc_symbol.path = "../otterc_symbol"
+otterc_ty.path = "../otterc_ty"
 otterc_utils.path = "../otterc_utils"
+ahash.workspace = true
+thiserror.workspace = true
+log.workspace = true
 
-anyhow.workspace = true
+[dev-dependencies]
+otterc_lexer.path = "../otterc_lexer"
+otterc_parser.path = "../otterc_parser"
+pretty_assertions.workspace = true
+env_logger.workspace = true
+#backtrace-on-stack-overflow = "0.3.0"
 
 [lints]
 workspace = true

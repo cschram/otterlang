@@ -3,11 +3,13 @@ use chumsky::prelude::*;
 
 use otterc_ast::nodes::{
     BinaryOp, Block, EnumVariant, Expr, FStringPart, Function, Literal, MatchArm, Node,
-    NumberLiteral, Param, Pattern, Program, Statement, Type, UnaryOp, UseImport,
+    NumberLiteral, Param, Pattern, Program, Stmt, UnaryOp, UseImport,
 };
-
+use otterc_ident::Identifier;
 use otterc_lexer::token::{Token, TokenKind};
 use otterc_span::Span;
+use otterc_symbol::Visibility;
+use otterc_ty::TyRef;
 use otterc_utils::errors::{Diagnostic, DiagnosticSeverity};
 use std::ops::Range;
 
@@ -106,7 +108,7 @@ fn identifier_or_keyword_parser() -> impl Parser<TokenKind, String, Error = Simp
     }
 }
 
-fn type_parser() -> impl Parser<TokenKind, Node<Type>, Error = Simple<TokenKind>> {
+fn type_parser() -> impl Parser<TokenKind, Node<TyRef>, Error = Simple<TokenKind>> {
     recursive(|ty| {
         identifier_parser()
             .then(
@@ -117,10 +119,13 @@ fn type_parser() -> impl Parser<TokenKind, Node<Type>, Error = Simple<TokenKind>
             )
             .map_with_span(|(base, args), span| {
                 Node::new(
-                    match args {
-                        Some(args) => Type::Generic { base, args },
-                        None => Type::Simple(base),
-                    },
+                    TyRef::new(
+                        base.into(),
+                        args.unwrap_or_default()
+                            .into_iter()
+                            .map(|arg: Node<TyRef>| arg.into_inner())
+                            .collect(),
+                    ),
                     span,
                 )
             })
@@ -194,7 +199,7 @@ fn parse_fstring(content: String, span: impl Into<Span>) -> Node<Expr> {
                                                 Span::new(span_start, span_start + trimmed.len());
                                             parts.push(Node::new(
                                                 FStringPart::Expr(Node::new(
-                                                    Expr::Identifier(trimmed.to_string()),
+                                                    Expr::Identifier(trimmed.into()),
                                                     s,
                                                 )),
                                                 s,
@@ -207,7 +212,7 @@ fn parse_fstring(content: String, span: impl Into<Span>) -> Node<Expr> {
                                     let s = Span::new(span_start, span_start + trimmed.len());
                                     parts.push(Node::new(
                                         FStringPart::Expr(Node::new(
-                                            Expr::Identifier(trimmed.to_string()),
+                                            Expr::Identifier(trimmed.into()),
                                             s,
                                         )),
                                         s,
@@ -338,8 +343,11 @@ fn expr_parser() -> impl Parser<TokenKind, Node<Expr>, Error = Simple<TokenKind>
             .map_with_span(|(name, fields), span| {
                 Node::new(
                     Expr::Struct {
-                        name,
-                        fields: fields.into_iter().collect(),
+                        name: name.into(),
+                        fields: fields
+                            .into_iter()
+                            .map(|(name, ty)| (name.into(), ty))
+                            .collect(),
                     },
                     span,
                 )
@@ -357,7 +365,7 @@ fn expr_parser() -> impl Parser<TokenKind, Node<Expr>, Error = Simple<TokenKind>
                 Node::new(
                     Expr::ListComprehension {
                         element: Box::new(element),
-                        var,
+                        var: var.into(),
                         iterable: Box::new(iterable),
                         condition: condition.map(Box::new),
                     },
@@ -381,7 +389,7 @@ fn expr_parser() -> impl Parser<TokenKind, Node<Expr>, Error = Simple<TokenKind>
                     Expr::DictComprehension {
                         key: Box::new(key),
                         value: Box::new(value),
-                        var,
+                        var: var.into(),
                         iterable: Box::new(iterable),
                         condition: condition.map(Box::new),
                     },
@@ -394,7 +402,8 @@ fn expr_parser() -> impl Parser<TokenKind, Node<Expr>, Error = Simple<TokenKind>
         let atom = choice((
             literal_expr_parser(),
             struct_init_pythonic,
-            identifier_parser().map_with_span(|name, span| Node::new(Expr::Identifier(name), span)),
+            identifier_parser()
+                .map_with_span(|name, span| Node::new(Expr::Identifier(name.into()), span)),
             expr.clone()
                 .delimited_by(just(TokenKind::LParen), just(TokenKind::RParen)),
             list_comprehension,
@@ -429,7 +438,7 @@ fn expr_parser() -> impl Parser<TokenKind, Node<Expr>, Error = Simple<TokenKind>
                 Node::new(
                     Expr::Member {
                         object: Box::new(object),
-                        field: field.into_inner(),
+                        field: field.into_inner().into(),
                     },
                     span,
                 )
@@ -638,12 +647,9 @@ fn expr_parser() -> impl Parser<TokenKind, Node<Expr>, Error = Simple<TokenKind>
                 .map_with_span(|arg, span| {
                     let span: Span = span.into();
                     Node::new(
-                        Statement::Expr(Node::new(
+                        Stmt::Expr(Node::new(
                             Expr::Call {
-                                func: Box::new(Node::new(
-                                    Expr::Identifier("print".to_string()),
-                                    span,
-                                )),
+                                func: Box::new(Node::new(Expr::Identifier("print".into()), span)),
                                 args: vec![arg],
                             },
                             span,
@@ -655,25 +661,26 @@ fn expr_parser() -> impl Parser<TokenKind, Node<Expr>, Error = Simple<TokenKind>
 
             let return_stmt = just(TokenKind::Return)
                 .ignore_then(expr.clone().or_not())
-                .map_with_span(|expr, span| Node::new(Statement::Return(expr), span))
+                .map_with_span(|expr, span| Node::new(Stmt::Return(expr), span))
                 .boxed();
 
             let let_stmt = just(TokenKind::Let)
                 .or_not()
-                .then(
+                .ignore_then(
                     identifier_parser()
                         .map_with_span(Node::new)
                         .then(just(TokenKind::Colon).ignore_then(type_parser()).or_not()),
                 )
                 .then_ignore(just(TokenKind::Equals))
                 .then(expr.clone())
-                .map_with_span(|((_let, (name, ty)), expr), span| {
+                .map_with_span(|((name, ty), expr), span| {
                     Node::new(
-                        Statement::Let {
-                            name,
+                        Stmt::Let {
+                            name: name.map(|n| n.into()),
                             ty,
                             expr,
-                            public: false, // Match arms are local scopes
+                            visibility: Visibility::Private,
+                            sym: None,
                         },
                         span,
                     )
@@ -693,14 +700,17 @@ fn expr_parser() -> impl Parser<TokenKind, Node<Expr>, Error = Simple<TokenKind>
                     let expr = Node::new(
                         Expr::Binary {
                             op,
-                            left: Box::new(Node::new(Expr::Identifier(name.clone()), name_span)),
+                            left: Box::new(Node::new(
+                                Expr::Identifier(name.clone().into()),
+                                name_span,
+                            )),
                             right: Box::new(rhs),
                         },
                         span,
                     );
                     Node::new(
-                        Statement::Assignment {
-                            name: Node::new(name, name_span),
+                        Stmt::Assignment {
+                            name: Node::new(name.into(), name_span),
                             expr,
                         },
                         span,
@@ -714,20 +724,26 @@ fn expr_parser() -> impl Parser<TokenKind, Node<Expr>, Error = Simple<TokenKind>
                 .then_ignore(just(TokenKind::Equals))
                 .then(expr.clone())
                 .map_with_span(|(name, expr), span| {
-                    Node::new(Statement::Assignment { name, expr }, span)
+                    Node::new(
+                        Stmt::Assignment {
+                            name: name.map(|n| n.into()),
+                            expr,
+                        },
+                        span,
+                    )
                 })
                 .boxed();
 
             let pass_stmt = just(TokenKind::Pass)
-                .map_with_span(|_, span| Node::new(Statement::Pass, span))
+                .map_with_span(|_, span| Node::new(Stmt::Pass, span))
                 .boxed();
 
             let break_stmt = just(TokenKind::Break)
-                .map_with_span(|_, span| Node::new(Statement::Break, span))
+                .map_with_span(|_, span| Node::new(Stmt::Break, span))
                 .boxed();
 
             let continue_stmt = just(TokenKind::Continue)
-                .map_with_span(|_, span| Node::new(Statement::Continue, span))
+                .map_with_span(|_, span| Node::new(Stmt::Continue, span))
                 .boxed();
 
             choice((
@@ -740,7 +756,7 @@ fn expr_parser() -> impl Parser<TokenKind, Node<Expr>, Error = Simple<TokenKind>
                 break_stmt,
                 continue_stmt,
                 expr.clone()
-                    .map_with_span(|expr, span| Node::new(Statement::Expr(expr), span)),
+                    .map_with_span(|expr, span| Node::new(Stmt::Expr(expr), span)),
             ))
             .then_ignore(newline.clone().or_not())
             .boxed()
@@ -813,7 +829,7 @@ fn pattern_parser() -> impl Parser<TokenKind, Node<Pattern>, Error = Simple<Toke
             .boxed();
 
         let identifier_pattern = identifier_parser()
-            .map_with_span(|ident, span| Node::new(Pattern::Identifier(ident), span))
+            .map_with_span(|ident, span| Node::new(Pattern::Identifier(ident.into()), span))
             .boxed();
 
         let variant_name = choice((
@@ -839,8 +855,8 @@ fn pattern_parser() -> impl Parser<TokenKind, Node<Pattern>, Error = Simple<Toke
             .map_with_span(|((enum_name, variant), fields), span| {
                 Node::new(
                     Pattern::EnumVariant {
-                        enum_name,
-                        variant,
+                        enum_name: enum_name.into(),
+                        variant: variant.into(),
                         fields: fields.unwrap_or_default(),
                     },
                     span,
@@ -862,8 +878,8 @@ fn pattern_parser() -> impl Parser<TokenKind, Node<Pattern>, Error = Simple<Toke
             .map_with_span(|(name, fields), span| {
                 Node::new(
                     Pattern::Struct {
-                        name,
-                        fields: fields.into_iter().collect(),
+                        name: name.into(),
+                        fields: fields.into_iter().map(|(k, v)| (k.into(), v)).collect(),
                     },
                     span,
                 )
@@ -881,7 +897,13 @@ fn pattern_parser() -> impl Parser<TokenKind, Node<Pattern>, Error = Simple<Toke
                     .or_not(),
             )
             .map_with_span(|(patterns, rest), span| {
-                Node::new(Pattern::Array { patterns, rest }, span)
+                Node::new(
+                    Pattern::Array {
+                        patterns,
+                        rest: rest.map(|r| r.into()),
+                    },
+                    span,
+                )
             })
             .boxed();
 
@@ -908,9 +930,9 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
         .map_with_span(|arg, span| {
             let span: Span = span.into();
             Node::new(
-                Statement::Expr(Node::new(
+                Stmt::Expr(Node::new(
                     Expr::Call {
-                        func: Box::new(Node::new(Expr::Identifier("print".to_string()), span)),
+                        func: Box::new(Node::new(Expr::Identifier("print".into()), span)),
                         args: vec![arg],
                     },
                     span,
@@ -922,7 +944,7 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
 
     let return_stmt = just(TokenKind::Return)
         .ignore_then(expr.clone().or_not())
-        .map_with_span(|expr, span| Node::new(Statement::Return(expr), span))
+        .map_with_span(|expr, span| Node::new(Stmt::Return(expr), span))
         .boxed();
 
     let pub_keyword = just(TokenKind::Pub).or_not();
@@ -939,11 +961,16 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
         .then(expr.clone())
         .map_with_span(|(((pub_kw, _let), (name, ty)), expr), span| {
             Node::new(
-                Statement::Let {
-                    name,
+                Stmt::Let {
+                    name: name.map(|n| n.into()),
                     ty,
                     expr,
-                    public: pub_kw.is_some(),
+                    visibility: if pub_kw.is_some() {
+                        Visibility::Public
+                    } else {
+                        Visibility::Private
+                    },
+                    sym: None,
                 },
                 span,
             )
@@ -953,7 +980,15 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
         .map_with_span(Node::new)
         .then_ignore(just(TokenKind::Equals))
         .then(expr.clone())
-        .map_with_span(|(name, expr), span| Node::new(Statement::Assignment { name, expr }, span));
+        .map_with_span(|(name, expr), span| {
+            Node::new(
+                Stmt::Assignment {
+                    name: name.map(|n| n.into()),
+                    expr,
+                },
+                span,
+            )
+        });
 
     let compound_assignment_stmt = identifier_parser()
         .map_with_span(|name, span| (name, Span::new(span.start, span.end)))
@@ -970,14 +1005,14 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
             let expr = Node::new(
                 Expr::Binary {
                     op,
-                    left: Box::new(Node::new(Expr::Identifier(name.clone()), name_span)),
+                    left: Box::new(Node::new(Expr::Identifier(name.clone().into()), name_span)),
                     right: Box::new(rhs),
                 },
                 span,
             );
             Node::new(
-                Statement::Assignment {
-                    name: Node::new(name, name_span),
+                Stmt::Assignment {
+                    name: Node::new(name.into(), name_span),
                     expr,
                 },
                 span,
@@ -1016,7 +1051,9 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
                 .ignore_then(identifier_parser())
                 .or_not(),
         )
-        .map_with_span(|(module, alias), span| Node::new(UseImport::new(module, alias), span))
+        .map_with_span(|(module, alias), span| {
+            Node::new(UseImport::new(module.into(), alias.map(|a| a.into())), span)
+        })
         .boxed();
 
     let use_stmt = just(TokenKind::Use)
@@ -1026,7 +1063,7 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
                 .allow_trailing()
                 .at_least(1),
         )
-        .map_with_span(|imports, span| Node::new(Statement::Use { imports }, span))
+        .map_with_span(|imports, span| Node::new(Stmt::Use { imports }, span))
         .boxed();
 
     // pub use statement for re-exports
@@ -1049,10 +1086,10 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
                 )
                 .map_with_span(|((module, item), alias), span| {
                     Node::new(
-                        Statement::PubUse {
-                            module,
-                            item,
-                            alias,
+                        Stmt::PubUse {
+                            module: module.into(),
+                            item: item.map(|i| i.into()),
+                            alias: alias.map(|a| a.into()),
                         },
                         span,
                     )
@@ -1061,13 +1098,13 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
         .boxed();
 
     let break_stmt = just(TokenKind::Break)
-        .map_with_span(|_, span| Node::new(Statement::Break, span))
+        .map_with_span(|_, span| Node::new(Stmt::Break, span))
         .boxed();
     let continue_stmt = just(TokenKind::Continue)
-        .map_with_span(|_, span| Node::new(Statement::Continue, span))
+        .map_with_span(|_, span| Node::new(Stmt::Continue, span))
         .boxed();
     let pass_stmt = just(TokenKind::Pass)
-        .map_with_span(|_, span| Node::new(Statement::Pass, span))
+        .map_with_span(|_, span| Node::new(Stmt::Pass, span))
         .boxed();
 
     // Create a recursive parser for statements
@@ -1113,7 +1150,7 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
             )
             .map_with_span(|(((cond, then_block), elif_blocks), else_block), span| {
                 Node::new(
-                    Statement::If {
+                    Stmt::If {
                         cond,
                         then_block,
                         elif_blocks,
@@ -1139,8 +1176,8 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
             )
             .map_with_span(|((var, iterable), body), span| {
                 Node::new(
-                    Statement::For {
-                        var,
+                    Stmt::For {
+                        var: var.map(|v| v.into()),
                         iterable,
                         body,
                     },
@@ -1160,7 +1197,7 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
                     .delimited_by(just(TokenKind::Indent), just(TokenKind::Dedent))
                     .map_with_span(|block, span| Node::new(Block::new(block), span)),
             )
-            .map_with_span(|(cond, body), span| Node::new(Statement::While { cond, body }, span))
+            .map_with_span(|(cond, body), span| Node::new(Stmt::While { cond, body }, span))
             .boxed();
 
         // Exception handling (try/except/finally/raise) removed - use Result<T, E> pattern matching instead
@@ -1180,7 +1217,7 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
             continue_stmt,
             pass_stmt,
             expr.clone()
-                .map_with_span(|expr, span| Node::new(Statement::Expr(expr), span)),
+                .map_with_span(|expr, span| Node::new(Stmt::Expr(expr), span)),
         ))
         .then_ignore(newline.clone().or_not())
         .boxed()
@@ -1196,15 +1233,14 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
 
     let function_param = identifier_parser()
         .map_with_span(Node::new)
-        .then(choice((
-            just(TokenKind::Colon).ignore_then(type_parser()).map(Some),
-            empty().to(None),
-        )))
+        .then(just(TokenKind::Colon).ignore_then(type_parser()))
         .then(choice((
             just(TokenKind::Equals).ignore_then(expr.clone()).map(Some),
             empty().to(None),
         )))
-        .map_with_span(|((name, ty), default), span| Node::new(Param::new(name, ty, default), span))
+        .map_with_span(|((name, ty), default), span| {
+            Node::new(Param::new(name.map(|n| n.into()), ty, default), span)
+        })
         .boxed();
 
     let function_params = function_param
@@ -1230,14 +1266,14 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
         .map_with_span(|(((((pub_kw, _fn), name), params), ret_ty), body), span| {
             Node::new(
                 if pub_kw.is_some() {
-                    Function::new_public(name, params, ret_ty, body)
+                    Function::new_public(name.into(), params, ret_ty, body)
                 } else {
-                    Function::new(name, params, ret_ty, body)
+                    Function::new(name.into(), params, ret_ty, body)
                 },
                 span,
             )
         })
-        .map_with_span(|func, span| Node::new(Statement::Function(func), span))
+        .map_with_span(|func, span| Node::new(Stmt::Function { func, sym: None }, span))
         .then_ignore(newline.clone().or_not())
         .boxed();
 
@@ -1271,7 +1307,10 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
         )
         .then_ignore(newline.clone().or_not())
         .map_with_span(|(name, fields), span| {
-            Node::new(EnumVariant::new(name, fields.unwrap_or_default()), span)
+            Node::new(
+                EnumVariant::new(name.into(), fields.unwrap_or_default()),
+                span,
+            )
         })
         .boxed();
 
@@ -1302,15 +1341,14 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
     // Recreate parsers for method definition
     let method_function_param = identifier_parser()
         .map_with_span(Node::new)
-        .then(choice((
-            just(TokenKind::Colon).ignore_then(type_parser()).map(Some),
-            empty().to(None),
-        )))
+        .then(just(TokenKind::Colon).ignore_then(type_parser()))
         .then(choice((
             just(TokenKind::Equals).ignore_then(expr.clone()).map(Some),
             empty().to(None),
         )))
-        .map_with_span(|((name, ty), default), span| Node::new(Param::new(name, ty, default), span))
+        .map_with_span(|((name, ty), default), span| {
+            Node::new(Param::new(name.map(|n| n.into()), ty, default), span)
+        })
         .boxed();
 
     let method_function_params = method_function_param
@@ -1334,24 +1372,29 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
         .map_with_span(|((((_kw, name), params), ret_ty), body), span| {
             // Methods automatically get 'self' as first parameter if not present
             let mut method_params = params;
-            if method_params.is_empty() || method_params[0].as_ref().name.as_ref() != "self" {
+            if method_params.is_empty()
+                || method_params[0].as_ref().name.as_ref() != &Identifier::from("self")
+            {
                 // Add self parameter at the beginning
-                let self_type = Type::Simple("Self".to_string());
+                let self_type = TyRef::new("Self".into(), Vec::new());
                 let self_span = Span::new(span.start + name.len() + 1, span.start + name.len() + 5);
                 let self_type_span = Span::new(self_span.start(), self_span.start());
                 let self_param = Node::new(
                     Param::new(
-                        Node::new("self".to_string(), self_span),
-                        Some(Node::new(self_type, self_type_span)),
+                        Node::new("self".into(), self_span),
+                        Node::new(self_type, self_type_span),
                         None,
                     ),
                     self_span,
                 );
                 method_params.insert(0, self_param);
             }
-            Node::new(Function::new(name, method_params, ret_ty, body), span)
+            Node::new(
+                Function::new(name.into(), method_params, ret_ty, body),
+                span,
+            )
         })
-        .map(|method| (None::<(String, Node<Type>)>, Some(method)))
+        .map(|method| (None::<(String, Node<TyRef>)>, Some(method)))
         .then_ignore(newline.clone().or_not())
         .boxed();
 
@@ -1385,12 +1428,17 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
         .map_with_span(
             |((((pub_kw, _), name), generics), (fields, methods)), span| {
                 Node::new(
-                    Statement::Struct {
-                        name,
-                        fields,
+                    Stmt::Struct {
+                        name: name.into(),
+                        fields: fields.into_iter().map(|(n, t)| (n.into(), t)).collect(),
                         methods,
-                        public: pub_kw.is_some(),
-                        generics,
+                        visibility: if pub_kw.is_some() {
+                            Visibility::Public
+                        } else {
+                            Visibility::Private
+                        },
+                        generics: generics.into_iter().map(|g| g.into()).collect(),
+                        sym: None,
                     },
                     span,
                 )
@@ -1409,11 +1457,16 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
         .then_ignore(newline.clone().or_not())
         .map_with_span(|((((pub_kw, _), name), generics), variants), span| {
             Node::new(
-                Statement::Enum {
-                    name,
+                Stmt::Enum {
+                    name: name.into(),
                     variants,
-                    public: pub_kw.is_some(),
-                    generics,
+                    visibility: if pub_kw.is_some() {
+                        Visibility::Public
+                    } else {
+                        Visibility::Private
+                    },
+                    generics: generics.into_iter().map(|g| g.into()).collect(),
+                    sym: None,
                 },
                 span,
             )
@@ -1439,11 +1492,20 @@ fn program_parser() -> impl Parser<TokenKind, Program, Error = Simple<TokenKind>
         .then_ignore(newline.clone().or_not())
         .map_with_span(|((((pub_kw, _), name), generics), target), span| {
             Node::new(
-                Statement::TypeAlias {
-                    name,
+                Stmt::TypeAlias {
+                    name: name.into(),
                     target,
-                    public: pub_kw.is_some(),
-                    generics: generics.into_inner(),
+                    visibility: if pub_kw.is_some() {
+                        Visibility::Public
+                    } else {
+                        Visibility::Private
+                    },
+                    generics: generics
+                        .into_inner()
+                        .into_iter()
+                        .map(|g| g.into())
+                        .collect(),
+                    sym: None,
                 },
                 span,
             )
@@ -1464,6 +1526,7 @@ mod tests {
     #![expect(clippy::panic, reason = "Panicking on test failures is acceptable")]
 
     use super::*;
+    use otterc_ident::Identifier;
 
     #[test]
     fn parses_multiple_use_modules() {
@@ -1473,12 +1536,12 @@ mod tests {
 
         assert_eq!(program.statements.len(), 1);
         match &program.statements[0].as_ref() {
-            Statement::Use { imports } => {
+            Stmt::Use { imports } => {
                 assert_eq!(imports.len(), 2);
-                assert_eq!(imports[0].as_ref().module, "fmt");
+                assert_eq!(imports[0].as_ref().module, Identifier::from("fmt"));
                 assert!(imports[0].as_ref().alias.is_none());
-                assert_eq!(imports[1].as_ref().module, "math");
-                assert_eq!(imports[1].as_ref().alias.as_deref(), Some("m"));
+                assert_eq!(imports[1].as_ref().module, Identifier::from("math"));
+                assert_eq!(imports[1].as_ref().alias, Some(Identifier::from("m")));
             }
             other => panic!("expected use statement, got {:?}", other),
         }
@@ -1492,9 +1555,9 @@ mod tests {
 
         assert_eq!(program.statements.len(), 1);
         match &program.statements[0].as_ref() {
-            Statement::Use { imports } => {
+            Stmt::Use { imports } => {
                 assert_eq!(imports.len(), 1);
-                assert_eq!(imports[0].as_ref().module, "otter:core");
+                assert_eq!(imports[0].as_ref().module, Identifier::from("otter:core"));
             }
             other => panic!("expected use statement, got {:?}", other),
         }

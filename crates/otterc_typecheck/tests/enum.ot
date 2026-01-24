@@ -1,0 +1,7 @@
+enum Foo:
+    Bar: (i64)
+
+fn main():
+    let invalid_variant = Foo.Baz()
+    let invalid_parameter_number = Foo.Bar(1, 2)
+    let invalid_parameter_type = Foo.Bar("not an i64")

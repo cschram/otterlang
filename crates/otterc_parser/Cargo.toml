@@ -4,10 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-otterc_span.path = "../otterc_span"
-otterc_lexer.path = "../otterc_lexer"
-otterc_utils.path = "../otterc_utils"
 otterc_ast.path = "../otterc_ast"
+otterc_ident.path = "../otterc_ident"
+otterc_lexer.path = "../otterc_lexer"
+otterc_span.path = "../otterc_span"
+otterc_symbol.path = "../otterc_symbol"
+otterc_ty.path = "../otterc_ty"
+otterc_utils.path = "../otterc_utils"
 
 chumsky = "0.9"
 

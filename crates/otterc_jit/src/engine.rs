@@ -6,7 +6,7 @@ use std::ffi::CString;
 use std::sync::{Arc, Mutex};
 use tempfile::TempDir;
 
-use otterc_ast::nodes::{Program, Statement};
+use otterc_ast::nodes::{Program, Stmt};
 use otterc_codegen::build_shared_library;
 use otterc_config::{CodegenOptLevel, CodegenOptions};
 use otterc_metrics::profiler::{FunctionMetrics, GlobalProfiler, HotFunction};
@@ -202,7 +202,7 @@ impl JitEngine {
 
         // Extract function definitions from program
         for stmt in &program.statements {
-            if let Statement::Function(func) = stmt.as_ref() {
+            if let Stmt::Function(func) = stmt.as_ref() {
                 let func_name = &func.as_ref().name;
                 let arg_count = func.as_ref().params.len();
 
@@ -210,7 +210,7 @@ impl JitEngine {
                 let func_ptr = self.load_function_symbol(&library, func_name, arg_count)?;
 
                 functions.insert(
-                    func_name.clone(),
+                    func_name.to_owned(),
                     CompiledFunction {
                         library: library.clone(),
                         function_ptr: func_ptr,

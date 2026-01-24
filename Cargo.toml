@@ -62,10 +62,11 @@ rayon.workspace = true
 ureq.workspace = true
 tokio.workspace = true
 serde_json.workspace = true
-
 clap = { version = "4.5", features = ["derive"] }
 colored = "2.1"
 tower-lsp = "0.20"
+log.workspace = true
+env_logger.workspace = true
 
 [workspace.dependencies]
 anyhow = "1.0"
@@ -89,12 +90,16 @@ tracing = "0.1"
 rayon = "1.8"
 ureq = { version = "2", default-features = true }
 tokio = { version = "1", features = [
-    "io-std",
-    "macros",
-    "rt-multi-thread",
-    "time",
-    "sync",
+  "io-std",
+  "macros",
+  "rt-multi-thread",
+  "time",
+  "sync",
 ] }
+thiserror = "2.0.17"
+pretty_assertions = "1.4.1"
+log = "0.4.29"
+env_logger = "0.11.8"
 
 [lints]
 workspace = true

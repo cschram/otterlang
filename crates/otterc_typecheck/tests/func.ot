@@ -1,0 +1,5 @@
+fn default_param_mismatch(foo: i64 = "bar"):
+    pass
+
+fn no_default_param_after_default(foo: i64 = 42, bar: i64):
+    pass

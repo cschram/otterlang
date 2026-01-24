@@ -1,0 +1,7 @@
+struct Person:
+    name: str
+    age: i64
+
+fn main():
+    let alice = Person(name="Alice", age=30)
+    println(f"Name: {alice.name}, Age: {alice.age}")

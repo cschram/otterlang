@@ -1,7 +1,7 @@
 use otterc_ast::nodes::{
-    BinaryOp, Block, Expr, FStringPart, Function, Literal, Node, Pattern, Program, Statement, Type,
-    UnaryOp,
+    BinaryOp, Block, Expr, FStringPart, Function, Literal, Node, Pattern, Program, Stmt, UnaryOp,
 };
+use otterc_ty::TyRef;
 
 /// Formats OtterLang code
 pub struct Formatter {
@@ -29,9 +29,9 @@ impl Formatter {
         output
     }
 
-    fn format_statement(&self, stmt: &Node<Statement>, indent: usize) -> String {
+    fn format_statement(&self, stmt: &Node<Stmt>, indent: usize) -> String {
         match stmt.as_ref() {
-            Statement::Let {
+            Stmt::Let {
                 name,
                 ty,
                 expr,
@@ -41,7 +41,7 @@ impl Formatter {
                 let pub_str = if *public { "pub " } else { "" };
                 let ty_str = ty
                     .as_ref()
-                    .map(|ty| format!(": {}", self.format_type(ty)))
+                    .map(|ty| format!(": {}", self.format_type(ty.as_ref())))
                     .unwrap_or_default();
                 format!(
                     "{}{}let {}{} = {}\n",
@@ -52,7 +52,7 @@ impl Formatter {
                     self.format_expr(expr, indent)
                 )
             }
-            Statement::Assignment { name, expr, .. } => {
+            Stmt::Assignment { name, expr, .. } => {
                 format!(
                     "{}{} = {}\n",
                     self.indent(indent),
@@ -60,14 +60,14 @@ impl Formatter {
                     self.format_expr(expr, indent)
                 )
             }
-            Statement::Function(f) => self.format_function(f, indent),
-            Statement::If {
+            Stmt::Function { func, .. } => self.format_function(func, indent),
+            Stmt::If {
                 cond,
                 then_block,
                 elif_blocks,
                 else_block,
             } => self.format_if(cond, then_block, elif_blocks, else_block, indent),
-            Statement::For {
+            Stmt::For {
                 var,
                 iterable,
                 body,
@@ -81,7 +81,7 @@ impl Formatter {
                     self.format_block(body, indent + 1)
                 )
             }
-            Statement::While { cond, body } => {
+            Stmt::While { cond, body } => {
                 format!(
                     "{}while {}:\n{}",
                     self.indent(indent),
@@ -89,7 +89,7 @@ impl Formatter {
                     self.format_block(body, indent + 1)
                 )
             }
-            Statement::Return(expr) => {
+            Stmt::Return(expr) => {
                 if let Some(expr) = expr {
                     format!(
                         "{}return {}\n",
@@ -100,28 +100,36 @@ impl Formatter {
                     format!("{}return\n", self.indent(indent))
                 }
             }
-            Statement::Break => format!("{}break\n", self.indent(indent)),
-            Statement::Continue => format!("{}continue\n", self.indent(indent)),
-            Statement::Pass => format!("{}pass\n", self.indent(indent)),
-            Statement::Expr(expr) => {
+            Stmt::Break => format!("{}break\n", self.indent(indent)),
+            Stmt::Continue => format!("{}continue\n", self.indent(indent)),
+            Stmt::Pass => format!("{}pass\n", self.indent(indent)),
+            Stmt::Expr(expr) => {
                 format!(
                     "{}{}\n",
                     self.indent(indent),
                     self.format_expr(expr, indent)
                 )
             }
-            Statement::Struct {
+            Stmt::Struct {
                 name,
                 fields,
                 methods,
                 public,
                 generics,
+                ..
             } => {
                 let pub_str = if *public { "pub " } else { "" };
                 let gen_str = if generics.is_empty() {
                     String::new()
                 } else {
-                    format!("<{}>", generics.join(", "))
+                    format!(
+                        "<{}>",
+                        generics
+                            .iter()
+                            .map(|g| g.as_str())
+                            .collect::<Vec<&str>>()
+                            .join(", ")
+                    )
                 };
                 let mut result = format!(
                     "{}{}struct {}{}:\n",
@@ -135,7 +143,7 @@ impl Formatter {
                         "{}    {}: {}\n",
                         self.indent(indent),
                         field_name,
-                        self.format_type(field_type)
+                        self.format_type(field_type.as_ref())
                     ));
                 }
                 for method in methods {
@@ -143,17 +151,25 @@ impl Formatter {
                 }
                 result
             }
-            Statement::Enum {
+            Stmt::Enum {
                 name,
                 variants,
                 public,
                 generics,
+                ..
             } => {
                 let pub_str = if *public { "pub " } else { "" };
                 let gen_str = if generics.is_empty() {
                     String::new()
                 } else {
-                    format!("<{}>", generics.join(", "))
+                    format!(
+                        "<{}>",
+                        generics
+                            .iter()
+                            .map(|g| g.as_str())
+                            .collect::<Vec<&str>>()
+                            .join(", ")
+                    )
                 };
                 let mut result = format!(
                     "{}{}enum {}{}:\n",
@@ -174,7 +190,7 @@ impl Formatter {
                             .as_ref()
                             .fields
                             .iter()
-                            .map(|ty| self.format_type(ty))
+                            .map(|ty| self.format_type(ty.as_ref()))
                             .collect::<Vec<_>>()
                             .join(", ");
                         result.push_str(&format!(
@@ -187,17 +203,25 @@ impl Formatter {
                 }
                 result
             }
-            Statement::TypeAlias {
+            Stmt::TypeAlias {
                 name,
                 target,
                 public,
                 generics,
+                ..
             } => {
                 let pub_str = if *public { "pub " } else { "" };
                 let gen_str = if generics.is_empty() {
                     String::new()
                 } else {
-                    format!("<{}>", generics.join(", "))
+                    format!(
+                        "<{}>",
+                        generics
+                            .iter()
+                            .map(|g| g.as_str())
+                            .collect::<Vec<&str>>()
+                            .join(", ")
+                    )
                 };
                 format!(
                     "{}{}type {}{} = {}\n",
@@ -205,23 +229,23 @@ impl Formatter {
                     pub_str,
                     name,
                     gen_str,
-                    self.format_type(target)
+                    self.format_type(target.as_ref())
                 )
             }
-            Statement::Use { imports } => {
+            Stmt::Use { imports } => {
                 let modules: Vec<String> = imports
                     .iter()
                     .map(|import| {
                         if let Some(alias) = &import.as_ref().alias {
                             format!("{} as {}", import.as_ref().module, alias)
                         } else {
-                            import.as_ref().module.clone()
+                            import.as_ref().module.to_string()
                         }
                     })
                     .collect();
                 format!("{}use {}\n", self.indent(indent), modules.join(", "))
             }
-            Statement::PubUse {
+            Stmt::PubUse {
                 module,
                 item,
                 alias,
@@ -235,7 +259,7 @@ impl Formatter {
                 }
                 format!("{}{}\n", self.indent(indent), re_export)
             }
-            Statement::Block(block) => self.format_block(block, indent),
+            Stmt::Block(block) => self.format_block(block, indent),
         }
     }
 
@@ -245,13 +269,10 @@ impl Formatter {
             .as_ref()
             .params
             .iter()
-            .map(|p| {
-                let base = if let Some(ref ty) = p.as_ref().ty {
-                    format!("{}: {}", p.as_ref().name, self.format_type(ty))
-                } else {
-                    p.as_ref().name.as_ref().clone()
-                };
-                if let Some(default) = &p.as_ref().default {
+            .map(|node| {
+                let param = node.as_ref();
+                let base = format!("{}: {}", param.name, self.format_type(param.ty.as_ref()));
+                if let Some(default) = &param.default {
                     format!("{} = {}", base, self.format_expr(default, indent))
                 } else {
                     base
@@ -260,7 +281,7 @@ impl Formatter {
             .collect::<Vec<_>>()
             .join(", ");
         let ret_str = if let Some(ref ret_ty) = f.as_ref().ret_ty {
-            format!(" -> {}", self.format_type(ret_ty))
+            format!(" -> {}", self.format_type(ret_ty.as_ref()))
         } else {
             String::new()
         };
@@ -318,7 +339,7 @@ impl Formatter {
     fn format_expr(&self, expr: &Node<Expr>, indent: usize) -> String {
         match expr.as_ref() {
             Expr::Literal(lit) => self.format_literal(lit),
-            Expr::Identifier(name) => name.clone(),
+            Expr::Identifier(name) => name.to_string(),
             Expr::Binary { op, left, right } => {
                 format!(
                     "{} {} {}",
@@ -350,16 +371,11 @@ impl Formatter {
                 then_branch,
                 else_branch,
             } => {
-                let else_str = if let Some(else_expr) = else_branch {
-                    format!(" else {}", self.format_expr(else_expr, indent))
-                } else {
-                    String::new()
-                };
                 format!(
                     "{} if {} else {}",
                     self.format_expr(then_branch, indent),
                     self.format_expr(cond, indent),
-                    else_str
+                    self.format_expr(else_branch, indent),
                 )
             }
             Expr::Range { start, end } => {
@@ -473,7 +489,7 @@ impl Formatter {
         match pattern.as_ref() {
             Pattern::Wildcard => "_".to_string(),
             Pattern::Literal(lit) => self.format_literal(lit),
-            Pattern::Identifier(name) => name.clone(),
+            Pattern::Identifier(name) => name.to_string(),
             Pattern::EnumVariant {
                 enum_name,
                 variant,
@@ -497,7 +513,7 @@ impl Formatter {
                         if let Some(p) = p_opt {
                             format!("{}: {}", f, self.format_pattern(p))
                         } else {
-                            f.clone()
+                            f.to_string()
                         }
                     })
                     .collect::<Vec<_>>()
@@ -536,21 +552,21 @@ impl Formatter {
         }
     }
 
-    fn format_type(&self, ty: &Node<Type>) -> String {
-        match ty.as_ref() {
-            Type::Simple(name) => name.clone(),
-            Type::Generic { base, args } => {
-                if args.is_empty() {
-                    base.clone()
+    fn format_type(&self, ty: &TyRef) -> String {
+        match ty {
+            TyRef::Unresolved { ident, params } => {
+                if params.is_empty() {
+                    ident.to_string()
                 } else {
-                    let args_str = args
+                    let params_str = params
                         .iter()
-                        .map(|g| self.format_type(g))
+                        .map(|ty_ref| self.format_type(ty_ref))
                         .collect::<Vec<_>>()
                         .join(", ");
-                    format!("{}<{}>", base, args_str)
+                    format!("{}<{}>", ident, params_str)
                 }
             }
+            TyRef::Resolved(ty_id) => ty_id.to_string(),
         }
     }
 

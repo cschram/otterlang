@@ -4,10 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-thiserror = "1.0"
-
 otterc_span.path = "../otterc_span"
 otterc_utils.path = "../otterc_utils"
+
+thiserror.workspace = true
 
 [lints]
 workspace = true

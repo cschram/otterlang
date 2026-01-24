@@ -22,7 +22,7 @@ pub use exports::{ExportFn, StableExportSet, StableFunction, register_dynamic_ex
 pub use metadata::load_bridge_functions;
 pub use providers::{SymbolProvider, bootstrap_stdlib};
 
-use otterc_symbol::registry::SymbolRegistry;
+use otterc_symbol::SymbolRegistry;
 
 use anyhow::Result;
 pub use rust_stubgen::RustStubGenerator;

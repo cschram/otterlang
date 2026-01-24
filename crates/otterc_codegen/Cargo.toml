@@ -9,6 +9,7 @@ otterc_config.path = "../otterc_config"
 otterc_ffi.path = "../otterc_ffi"
 otterc_span.path = "../otterc_span"
 otterc_symbol.path = "../otterc_symbol"
+otterc_ty.path = "../otterc_ty"
 otterc_typecheck.path = "../otterc_typecheck"
 
 anyhow.workspace = true

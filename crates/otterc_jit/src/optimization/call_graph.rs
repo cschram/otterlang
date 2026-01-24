@@ -1,4 +1,4 @@
-use otterc_ast::nodes::{Block, Expr, Function, Statement};
+use otterc_ast::nodes::{Block, Expr, Function, Stmt};
 
 /// Builds call graph for optimization
 pub struct CallGraph {
@@ -31,16 +31,16 @@ impl CallGraph {
         callees
     }
 
-    fn extract_callees_from_stmt(&self, stmt: &Statement, callees: &mut Vec<String>) {
+    fn extract_callees_from_stmt(&self, stmt: &Stmt, callees: &mut Vec<String>) {
         match stmt {
-            Statement::Expr(expr) => {
+            Stmt::Expr(expr) => {
                 if let Expr::Call { func, .. } = expr.as_ref()
                     && let Expr::Identifier(name) = func.as_ref().as_ref()
                 {
                     callees.push(name.clone());
                 }
             }
-            Statement::If {
+            Stmt::If {
                 then_block,
                 elif_blocks,
                 else_block,
@@ -54,7 +54,7 @@ impl CallGraph {
                     self.extract_callees_from_block(block.as_ref(), callees);
                 }
             }
-            Statement::For { body, .. } | Statement::While { body, .. } => {
+            Stmt::For { body, .. } | Stmt::While { body, .. } => {
                 self.extract_callees_from_block(body.as_ref(), callees);
             }
             _ => {}

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::{Module, ModuleLoader, ModulePath, ModuleResolver};
-use otterc_ast::nodes::{Program, Statement};
+use otterc_ast::nodes::{Program, Stmt};
 const DEFAULT_MODULES: &[&str] = &["otter:core"];
 
 const VIRTUAL_STDLIB_MODULES: &[&str] = &[
@@ -55,22 +55,22 @@ impl ModuleProcessor {
         self.load_default_modules(&mut dependencies)?;
 
         for statement in &program.statements {
-            if let Statement::Use { imports } = statement.as_ref() {
+            if let Stmt::Use { imports } = statement.as_ref() {
                 for import in imports {
                     let module = &import.as_ref().module;
-                    if Self::is_virtual_module(module) {
+                    if Self::is_virtual_module(module.as_str()) {
                         continue;
                     }
-                    let module_path = ModulePath::from_string(module, &self.source_dir)?;
+                    let module_path = ModulePath::from_string(module.as_str(), &self.source_dir)?;
 
                     match module_path {
                         ModulePath::Rust(_) => {
-                            rust_imports.push(module.clone());
+                            rust_imports.push(module);
                         }
                         ModulePath::Stdlib(_) => {
                             let resolved = {
                                 let resolver = self.loader.resolver();
-                                resolver.resolve(module)?
+                                resolver.resolve(module.as_str())?
                             };
                             self.load_stdlib_dependency(resolved, &mut dependencies)?;
                         }
@@ -78,7 +78,7 @@ impl ModuleProcessor {
                             let source_dir = self.source_dir.clone();
                             let resolved = {
                                 let resolver = self.loader.resolver();
-                                resolver.resolve(module)?
+                                resolver.resolve(module.as_str())?
                             };
                             self.load_local_dependency(&source_dir, resolved, &mut dependencies)?;
                         }
@@ -86,7 +86,7 @@ impl ModuleProcessor {
                             let source_dir = self.source_dir.clone();
                             let resolved = {
                                 let resolver = self.loader.resolver();
-                                resolver.resolve(module)?
+                                resolver.resolve(module.as_str())?
                             };
                             if self.is_stdlib_path(&resolved) {
                                 self.load_stdlib_dependency(resolved, &mut dependencies)?;
@@ -123,14 +123,14 @@ impl ModuleProcessor {
         self.load_default_modules(&mut dependencies)?;
 
         for statement in &module_statements {
-            if let Statement::Use { imports } = statement.as_ref() {
+            if let Stmt::Use { imports } = statement.as_ref() {
                 for import in imports {
                     let module = &import.as_ref().module;
-                    if Self::is_virtual_module(module) {
+                    if Self::is_virtual_module(module.as_str()) {
                         continue;
                     }
                     let module_dir = module_path.parent().unwrap_or(Path::new("."));
-                    let module_path_enum = ModulePath::from_string(module, module_dir)?;
+                    let module_path_enum = ModulePath::from_string(module.as_str(), module_dir)?;
 
                     match module_path_enum {
                         ModulePath::Rust(_) => {}
@@ -139,7 +139,7 @@ impl ModuleProcessor {
                                 module_dir.to_path_buf(),
                                 self.stdlib_dir.clone(),
                             );
-                            let resolved = resolver.resolve(module)?;
+                            let resolved = resolver.resolve(module.as_str())?;
                             self.load_stdlib_dependency(resolved, &mut dependencies)?;
                         }
                         ModulePath::Relative(_) | ModulePath::Absolute(_) => {
@@ -147,7 +147,7 @@ impl ModuleProcessor {
                                 module_dir.to_path_buf(),
                                 self.stdlib_dir.clone(),
                             );
-                            let resolved = resolver.resolve(module)?;
+                            let resolved = resolver.resolve(module.as_str())?;
                             self.load_local_dependency(module_path, resolved, &mut dependencies)?;
                         }
                         ModulePath::Unqualified(_) => {
@@ -155,7 +155,7 @@ impl ModuleProcessor {
                                 module_dir.to_path_buf(),
                                 self.stdlib_dir.clone(),
                             );
-                            let resolved = resolver.resolve(module)?;
+                            let resolved = resolver.resolve(module.as_str())?;
                             if self.is_stdlib_path(&resolved) {
                                 self.load_stdlib_dependency(resolved, &mut dependencies)?;
                             } else {

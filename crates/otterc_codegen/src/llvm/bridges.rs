@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use libloading::Library;
-use otterc_ast::nodes::{Program, Statement};
+use otterc_ast::nodes::{Program, Stmt};
 use otterc_ffi::{BridgeSymbolRegistry, CargoBridge, DynamicLibraryLoader, FunctionSpec, TypeSpec};
 
 use otterc_ffi::register_dynamic_exports;
@@ -51,7 +51,7 @@ fn collect_rust_imports(program: &Program) -> HashMap<String, HashSet<String>> {
     let mut imports: HashMap<String, HashSet<String>> = HashMap::new();
 
     for statement in &program.statements {
-        if let Statement::Use {
+        if let Stmt::Use {
             imports: use_imports,
         } = statement.as_ref()
         {

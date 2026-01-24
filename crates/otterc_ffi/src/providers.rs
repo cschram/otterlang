@@ -1,6 +1,6 @@
 use once_cell::sync::OnceCell;
 
-use otterc_symbol::registry::SymbolRegistry;
+use otterc_symbol::SymbolRegistry;
 
 #[derive(Clone, Copy)]
 pub struct SymbolProvider {
